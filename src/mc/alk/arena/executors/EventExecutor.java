@@ -183,11 +183,12 @@ public class EventExecutor extends BAExecutor{
 	}
 
 	public boolean eventJoin(ArenaPlayer p, EventParams eventParams, String[] args, boolean adminCommand) {
-		if (!p.hasPermission("arena."+eventParams.getName().toLowerCase()+".join") &&
-				!p.hasPermission("arena."+eventParams.getCommand().toLowerCase()+".join") ){
+		if (!adminCommand && !hasMPPerm(p, eventParams, "join")){
 			sendSystemMessage(p,"no_join_perms", eventParams.getCommand());
 			return false;
 		}
+		if (isDisabled(p, eventParams)){
+			return true;}
 		Event event = controller.getOpenEvent(eventParams);
 		/// If we allow players to start their own events
 		if (event == null && Defaults.ALLOW_PLAYER_EVENT_CREATION){
@@ -235,6 +236,13 @@ public class EventExecutor extends BAExecutor{
 		Team t = teamc.getSelfFormedTeam(p);
 		if (t==null){
 			t = TeamController.createTeam(p); }
+		/// Get or Make a team for the Player
+
+		if (!canJoin(t,true)){
+			sendSystemMessage(p, "teammate_cant_join");
+			return sendMessage(p,"&6/team leave: &cto leave the team");
+		}
+
 		/// Check any options specified in the join
 		JoinOptions jp;
 		try {
@@ -254,7 +262,7 @@ public class EventExecutor extends BAExecutor{
 		if (!event.canJoin(t)){
 			return false;}
 		/// Check fee
-		if (!checkFee(sq, p)){
+		if (!checkAndRemoveFee(sq, t)){
 			return false;}
 		TeamQObject tqo = new TeamQObject(t,sq,jp);
 

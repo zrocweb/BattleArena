@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import mc.alk.arena.BattleArena;
 import mc.alk.arena.Defaults;
+import mc.alk.arena.Permissions;
 import mc.alk.arena.listeners.BAPlayerListener;
 import mc.alk.arena.util.InventoryUtil;
 import mc.alk.arena.util.Log;
@@ -31,14 +32,14 @@ public class TeleportController implements Listener{
 	static Set<String> teleporting = Collections.synchronizedSet(new HashSet<String>());
 	private final int TELEPORT_FIX_DELAY = 15; // ticks
 
-	public static void teleportPlayer(final Player player, final Location location, final boolean wipe, boolean giveBypassPerms){
+	public static boolean teleportPlayer(final Player player, final Location location, final boolean wipe, boolean giveBypassPerms){
 		if (!player.isOnline() || player.isDead()){
 			BAPlayerListener.teleportOnReenter(player.getName(),location);
 			if (wipe){
 				InventoryUtil.clearInventory(player);}
-			return;
+			return false;
 		}
-		teleport(player,location,giveBypassPerms);
+		return teleport(player,location,giveBypassPerms);
 	}
 
 	public static boolean teleport(final Player player, final Location location){
@@ -76,7 +77,7 @@ public class TeleportController implements Listener{
 		PermissionsUtil.givePlayerInventoryPerms(player);
 		/// Give bypass perms for Teleport checks like noTeleport, and noChangeWorld
 		if (giveBypassPerms && BattleArena.getSelf().isEnabled())
-			player.addAttachment(BattleArena.getSelf(), Defaults.TELEPORT_BYPASS_PERM, true, 1);
+			player.addAttachment(BattleArena.getSelf(), Permissions.TELEPORT_BYPASS_PERM, true, 1);
 
 		if (!player.teleport(loc)){
 			if (Defaults.DEBUG)Log.warn("[BattleArena] Couldnt teleport player=" + player.getName() + " loc=" + loc);

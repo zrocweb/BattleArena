@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import mc.alk.arena.BattleArena;
+import mc.alk.arena.competition.match.Match;
 import mc.alk.arena.objects.ArenaPlayer;
 import mc.alk.arena.objects.ArenaSize;
 import mc.alk.arena.objects.MatchParams;
@@ -74,18 +75,24 @@ public class JoinOptions extends ArenaSize{
 		return matchesTeamSize(params);
 	}
 
+	public static boolean matches(JoinOptions jo, Match match) {
+		return jo==null || (jo.matches(match.getArena()) && jo.matches(match.getParams()));
+	}
+
+
+
 	public boolean nearby(Arena arena, double distance) {
 		UUID wid = joinedLocation.getWorld().getUID();
 		Location arenajoinloc = arena.getJoinLocation();
 		if (arenajoinloc != null){
 			return (wid == arenajoinloc.getWorld().getUID() &&
-					arenajoinloc.distanceSquared(joinedLocation) <= distance);
+					arenajoinloc.distance(joinedLocation) <= distance);
 		}
 
 		for (Location l : arena.getSpawnLocs().values()){
 			if (l.getWorld().getUID() != wid)
 				return false;
-			if (l.distanceSquared(joinedLocation) <= distance)
+			if (l.distance(joinedLocation) <= distance)
 				return true;
 		}
 		return false;

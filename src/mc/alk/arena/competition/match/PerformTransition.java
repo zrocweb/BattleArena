@@ -27,6 +27,7 @@ import mc.alk.arena.util.DisguiseInterface;
 import mc.alk.arena.util.EffectUtil;
 import mc.alk.arena.util.ExpUtil;
 import mc.alk.arena.util.InventoryUtil;
+import mc.alk.arena.util.Log;
 import mc.alk.arena.util.MessageUtil;
 import mc.alk.arena.util.PlayerUtil;
 import mc.alk.arena.util.TeamUtil;
@@ -38,6 +39,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.potion.PotionEffect;
+
 
 public class PerformTransition {
 
@@ -112,6 +114,9 @@ public class PerformTransition {
 			return true;}
 		final boolean teleportOut = mo.shouldTeleportOut();
 		final boolean wipeInventory = mo.clearInventory();
+		/// People that are quiting/leaving with wipeInventory should lose their inventory
+		/// even if they are "dead" or "offline"
+		final boolean forceClearInventory = wipeInventory && mo.shouldTeleportOut();
 
 		List<PotionEffect> effects = mo.getEffects()!=null ? new ArrayList<PotionEffect>(mo.getEffects()) : null;
 		final Integer health = mo.getHealth();
@@ -127,7 +132,9 @@ public class PerformTransition {
 				/// EnterWaitRoom is supposed to happen before the teleport in event, but it depends on the result of a teleport
 				/// Since we cant really tell the eventual result.. do our best guess
 				am.enterWaitRoom(player);
-				final Location l = jitter(am.getWaitRoomSpawn(teamIndex,false),rand.nextInt(team.size()));
+				final Location l = jitter(
+						am.getWaitRoomSpawn(teamIndex,am.spawnsRandom),
+						rand.nextInt(team.size()));
 				TeleportController.teleportPlayer(p, l, false, true);
 				PlayerStoreController.setGameMode(p, GameMode.SURVIVAL);
 			} else {
@@ -143,15 +150,16 @@ public class PerformTransition {
 				am.enterArena(player,team);
 				final Location l = jitter(am.getTeamSpawn(teamIndex,false),rand.nextInt(team.size()));
 				TeleportController.teleportPlayer(p, l, false, true);
+				PlayerUtil.setGod(p,false);
 				PlayerStoreController.setGameMode(p, GameMode.SURVIVAL);
 			} else {
 				playerReady = false;
 			}
 		}
 
+		final boolean storeAll = mo.hasOption(TransitionOption.STOREALL);
 		/// Only do if player is online options
 		if (playerReady && !dead){
-			final boolean storeAll = mo.hasOption(TransitionOption.STOREALL);
 			if (storeAll || mo.hasOption(TransitionOption.STOREGAMEMODE)){ am.psc.storeGamemode(player);}
 			if (storeAll || mo.hasOption(TransitionOption.STOREEXPERIENCE)){ am.psc.storeExperience(player);}
 			if (storeAll || mo.hasOption(TransitionOption.STOREITEMS)) { am.psc.storeItems(player);}
@@ -168,6 +176,9 @@ public class PerformTransition {
 			if (hunger != null) { PlayerUtil.setHunger(p, hunger); }
 			if (mo.hasOption(TransitionOption.INVULNERABLE)) { PlayerUtil.setInvulnerable(p,mo.getInvulnerable()); }
 			if (mo.hasOption(TransitionOption.GAMEMODE)) { PlayerUtil.setGameMode(p,mo.getGameMode()); }
+			if (mo.hasOption(TransitionOption.FLIGHTOFF)) { PlayerUtil.setFlight(p,false); }
+			if (mo.hasOption(TransitionOption.FLIGHTON)) { PlayerUtil.setFlight(p,true); }
+			if (mo.hasOption(TransitionOption.FLIGHTSPEED)) { PlayerUtil.setFlightSpeed(p,mo.getFlightSpeed()); }
 			if (mo.hasOption(TransitionOption.DOCOMMANDS)) { PlayerUtil.doCommands(p,mo.getDoCommands()); }
 			if (mo.deEnchant() != null && mo.deEnchant()) { deEnchant(p);}
 			if (DisguiseInterface.enabled() && undisguise != null && undisguise) {DisguiseInterface.undisguise(p);}
@@ -206,6 +217,8 @@ public class PerformTransition {
 			if (teleportIn){
 				transition(am, MatchState.ONSPAWN, player, team, false);
 			}
+		} else if (forceClearInventory){
+			InventoryUtil.clearInventory(p);
 		}
 
 		/// Teleport out, need to do this at the end so that all the onCancel/onComplete options are completed first
@@ -217,7 +230,10 @@ public class PerformTransition {
 				loc = mo.getTeleportToLoc();
 			else
 				loc = am.oldlocs.get(player.getName());
-			if (insideArena || !onlyInMatch){
+			if (loc == null){
+				Log.err("[BA Error] Teleporting to a null location!  teleportTo=" + mo.hasOption(TransitionOption.TELEPORTTO)+
+						", teleportOnArenaExit="+mo.hasOption(TransitionOption.TELEPORTONARENAEXIT));
+			} else if (insideArena || !onlyInMatch){
 				TeleportController.teleportPlayer(p, loc, wipeInventory, true);
 				am.leaveArena(player);
 			}

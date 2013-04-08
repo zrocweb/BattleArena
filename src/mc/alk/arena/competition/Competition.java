@@ -9,10 +9,10 @@ import java.util.Set;
 
 import mc.alk.arena.controllers.MethodController;
 import mc.alk.arena.events.BAEvent;
-import mc.alk.arena.listeners.ArenaListener;
 import mc.alk.arena.objects.ArenaPlayer;
 import mc.alk.arena.objects.CompetitionState;
 import mc.alk.arena.objects.MatchParams;
+import mc.alk.arena.objects.arenas.ArenaListener;
 import mc.alk.arena.objects.teams.Team;
 import mc.alk.arena.objects.teams.TeamHandler;
 
@@ -43,6 +43,12 @@ public abstract class Competition implements ArenaListener, TeamHandler {
 	 * @return
 	 */
 	public abstract int getID();
+
+	/**
+	 * Get the Name for this competition
+	 * @return
+	 */
+	public abstract String getName();
 
 	/**
 	 * Returns the current state of the competition

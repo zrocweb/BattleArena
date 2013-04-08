@@ -172,18 +172,14 @@ public class ReservedArenaEvent extends Event {
 
 	@Override
 	public boolean canJoin() {
-		return super.canJoin() && isOpen();
+		return (super.canJoin() && isOpen()) ||
+				(arenaMatch != null && arenaMatch.canStillJoin());
 	}
 
 	@Override
 	public boolean leave(ArenaPlayer p){
-		Team t = getTeam(p);
-		if (t==null) /// they arent in this Event
-			return true;
-
 		arenaMatch.onLeave(p);
-		boolean canLeave = super.leave(p);
-		return canLeave;
+		return super.leave(p);
 	}
 	public Match getMatch(){
 		return arenaMatch;

@@ -29,13 +29,13 @@ import mc.alk.arena.events.events.EventOpenEvent;
 import mc.alk.arena.events.events.EventResultEvent;
 import mc.alk.arena.events.events.EventStartEvent;
 import mc.alk.arena.events.events.TeamJoinedEvent;
-import mc.alk.arena.listeners.ArenaListener;
 import mc.alk.arena.objects.ArenaPlayer;
 import mc.alk.arena.objects.CompetitionResult;
 import mc.alk.arena.objects.CompetitionState;
 import mc.alk.arena.objects.EventParams;
 import mc.alk.arena.objects.EventState;
 import mc.alk.arena.objects.MatchResult;
+import mc.alk.arena.objects.arenas.ArenaListener;
 import mc.alk.arena.objects.exceptions.NeverWouldJoinException;
 import mc.alk.arena.objects.options.TransitionOptions;
 import mc.alk.arena.objects.queues.TeamQObject;
@@ -145,8 +145,6 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 			p.sendMessage(Log.colorChat(eventParams.getPrefix()+
 					"&6 &5There werent enough players to create a &6" + eventParams.getMinTeamSize() +"&5 person team"));
 		}
-		joinHandler.deconstruct();
-		joinHandler = null;
 		transitionTo(EventState.RUNNING);
 
 		callEvent(new EventStartEvent(this,teams));
@@ -194,6 +192,8 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 
 		removeAllTeams();
 		teams.clear();
+		joinHandler.deconstruct();
+		joinHandler = null;
 		callEvent(new EventFinishedEvent(this));
 	}
 
@@ -228,7 +228,7 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 		Team t = getTeam(p);
 		p.removeCompetition(this);
 		if (t==null) /// they arent in this Event
-			return true;
+			return false;
 		t.playerLeft(p);
 		return true;
 	}
@@ -308,6 +308,7 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 		return tjr;
 	}
 
+	@Override
 	public String getName(){
 		return name;
 	}

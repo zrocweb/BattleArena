@@ -3,7 +3,7 @@ package mc.alk.arena.executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import mc.alk.arena.BattleArena;
-import mc.alk.arena.Defaults;
+import mc.alk.arena.Permissions;
 import mc.alk.arena.controllers.ArenaEditor;
 import mc.alk.arena.controllers.ArenaEditor.CurrentSelection;
 import mc.alk.arena.controllers.BattleArenaController;
@@ -41,7 +41,7 @@ public abstract class CustomCommandExecutor extends BaseExecutor{
 
 	@Override
 	protected boolean hasAdminPerms(CommandSender sender){
-		return super.hasAdminPerms(sender) || sender.hasPermission(Defaults.ARENA_ADMIN);
+		return super.hasAdminPerms(sender) || sender.hasPermission(Permissions.ADMIN_NODE);
 	}
 
 	@Override
@@ -56,8 +56,8 @@ public abstract class CustomCommandExecutor extends BaseExecutor{
 
 	@Override
 	protected Arguments verifyArgs(MethodWrapper mwrapper, MCCommand cmd,
-			CommandSender sender, Command command, String label, String[] args, int startIndex
-			) throws IllegalArgumentException{
+			CommandSender sender, Command command, String label, String[] args, int startIndex)
+					throws IllegalArgumentException{
 
 		final boolean isPlayer = sender instanceof Player;
 		if (cmd.selection()){
