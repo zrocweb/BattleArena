@@ -7,10 +7,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import mc.alk.arena.controllers.ParamController;
 import mc.alk.arena.objects.ArenaParams;
+import mc.alk.arena.objects.MatchParams;
 import mc.alk.arena.util.CaseInsensitiveMap;
 
 import org.bukkit.plugin.Plugin;
+
 
 public class ArenaType implements Comparable<ArenaType>{
 	static public CaseInsensitiveMap<Class<? extends Arena>> classes = new CaseInsensitiveMap<Class<? extends Arena>>();
@@ -119,10 +122,10 @@ public class ArenaType implements Comparable<ArenaType>{
 		return sb.toString();
 	}
 
-	public static ArenaType register(String arenaType, Class<? extends Arena> c, Plugin plugin) {
+	public static ArenaType register(String arenaType, Class<? extends Arena> arenaClass, Plugin plugin) {
 		final String uarenaType = arenaType.toUpperCase();
 		if (!classes.containsKey(uarenaType))
-			classes.put(uarenaType, c);
+			classes.put(uarenaType, arenaClass);
 		if (!types.containsKey(uarenaType)){
 			new ArenaType(arenaType,plugin);
 		}
@@ -159,6 +162,7 @@ public class ArenaType implements Comparable<ArenaType>{
 		Class<?> arenaClass = classes.get(arenaType.name);
 		if (arenaClass == null)
 			return null;
+
 		Class<?>[] args = {};
 		try {
 			Constructor<?> constructor = arenaClass.getConstructor(args);
@@ -188,11 +192,19 @@ public class ArenaType implements Comparable<ArenaType>{
 	}
 
 	public static void addAliasForType(String type, String alias) {
+		type = type.toUpperCase();
+		alias = alias.toUpperCase();
+		if (type.equals(alias))
+			return;
 		ArenaType at = fromString(type);
 		if (at == null)
 			return;
 		types.put(alias, at);
 		classes.put(alias, getArenaClass(at));
+		MatchParams mp = ParamController.getMatchParams(type);
+		if (mp == null)
+			return;
+		ParamController.addAlias(alias, mp);
 	}
 
 
@@ -201,7 +213,7 @@ public class ArenaType implements Comparable<ArenaType>{
 	}
 
 	public static Collection<ArenaType> getTypes(Plugin plugin) {
-		List<ArenaType> result = new ArrayList<ArenaType>();
+		Set<ArenaType> result = new HashSet<ArenaType>();
 		for (ArenaType type: types.values()){
 			if (type.getPlugin().equals(plugin)){
 				result.add(type);
@@ -220,5 +232,9 @@ public class ArenaType implements Comparable<ArenaType>{
 
 	public static boolean contains(String arenaType) {
 		return types.containsKey(arenaType);
+	}
+	public static boolean isSame(String checkType, ArenaType arenaType) {
+		ArenaType at = types.get(checkType);
+		return at == null ? false : at.equals(arenaType);
 	}
 }

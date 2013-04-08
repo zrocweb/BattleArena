@@ -1,5 +1,6 @@
 package mc.alk.arena.serializers;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -7,26 +8,36 @@ import java.util.Set;
 
 import mc.alk.arena.BattleArena;
 import mc.alk.arena.Defaults;
+import mc.alk.arena.competition.events.TournamentEvent;
+import mc.alk.arena.competition.match.ArenaMatch;
 import mc.alk.arena.controllers.APIRegistrationController;
+import mc.alk.arena.controllers.BattleArenaController;
+import mc.alk.arena.controllers.EventController;
 import mc.alk.arena.controllers.HeroesController;
 import mc.alk.arena.controllers.OptionSetController;
+import mc.alk.arena.controllers.ParamController;
+import mc.alk.arena.executors.EventExecutor;
+import mc.alk.arena.executors.TournamentExecutor;
+import mc.alk.arena.objects.EventParams;
+import mc.alk.arena.objects.MatchParams;
 import mc.alk.arena.objects.MatchState;
 import mc.alk.arena.objects.arenas.Arena;
 import mc.alk.arena.objects.arenas.ArenaType;
-import mc.alk.arena.objects.exceptions.InvalidOptionException;
 import mc.alk.arena.objects.messaging.AnnouncementOptions;
 import mc.alk.arena.objects.messaging.AnnouncementOptions.AnnouncementOption;
 import mc.alk.arena.objects.options.TransitionOption;
 import mc.alk.arena.objects.options.TransitionOptions;
-import mc.alk.arena.util.DisabledCommandsUtil;
+import mc.alk.arena.util.FileUtil;
 import mc.alk.arena.util.KeyValue;
 import mc.alk.arena.util.Log;
 
+import org.apache.commons.lang.StringUtils;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public class BAConfigSerializer extends ConfigSerializer{
+public class BAConfigSerializer extends BaseConfig{
+
 	public void loadDefaults(){
 		try {config.load(file);} catch (Exception e){e.printStackTrace();}
 
@@ -41,7 +52,8 @@ public class BAConfigSerializer extends ConfigSerializer{
 		Defaults.USE_ARENAS_ONLY_IN_ORDER = config.getBoolean("useArenasOnlyInOrder", Defaults.USE_ARENAS_ONLY_IN_ORDER);
 		Defaults.ENABLE_TELEPORT_FIX = config.getBoolean("enableInvisibleTeleportFix", Defaults.ENABLE_TELEPORT_FIX);
 		parseOptionSets(config.getConfigurationSection("optionSets"));
-		DisabledCommandsUtil.addAll(config.getStringList("disabledCommands"));
+		ArenaMatch.setDisabledCommands(config.getStringList("disabledCommands"));
+		BattleArenaController.setDisabledCommands(config.getStringList("disabledQueueCommands"));
 		if (HeroesController.enabled()){
 			List<String> disabled = config.getStringList("disabledHeroesSkills");
 			if (disabled != null && !disabled.isEmpty()){
@@ -52,52 +64,68 @@ public class BAConfigSerializer extends ConfigSerializer{
 
 	public void loadCompetitions(){
 		try {config.load(file);} catch (Exception e){e.printStackTrace();}
-		Set<String> defaultMatchTypes = new HashSet<String>(Arrays.asList(new String[] {"arena","skirmish","colliseum","battleground"}));
-		Set<String> defaultEventTypes = new HashSet<String>(Arrays.asList(new String[] {"freeForAll","deathMatch"}));
-		Set<String> exclude = new HashSet<String>(Arrays.asList(new String[] {"defaultOptions","tourney","optionSets"}));
+		Set<String> defaultMatchTypes = new HashSet<String>(Arrays.asList(
+				new String[] {"Arena","Skirmish","Colosseum","Battleground", "Duel"}));
+		Set<String> defaultEventTypes = new HashSet<String>(Arrays.asList(new String[] {"FreeForAll","DeathMatch"}));
+		Set<String> exclude = new HashSet<String>(Arrays.asList(new String[] {}));
 
 		Set<String> allTypes = new HashSet<String>(defaultMatchTypes);
 		allTypes.addAll(defaultEventTypes);
 		JavaPlugin plugin = BattleArena.getSelf();
 
 		APIRegistrationController api = new APIRegistrationController();
-		/// For legacy reasons
-		ArenaType.register("ffa", Arena.class, BattleArena.getSelf());
+		ArenaType.register("Tourney", Arena.class, plugin);
 
-		/// Setup tournament solo as it's a bit different
+		File dir = plugin.getDataFolder();
+		File compDir = new File(dir+"/competitions");
+
+		/// Load all default types
+		for (String comp : allTypes){
+			/// For some reason this next line is almost directly in APIRegistration and works
+			/// for extensions but not for BattleArena defaults.
+			/// ONLY doesnt work in Windows... odd...
+			FileUtil.load(BattleArena.getSelf().getClass(),dir.getPath()+"/competitions/"+comp+"Config.yml",
+					"/default_files/competitions/"+comp+"Config.yml");
+			String capComp = StringUtils.capitalize(comp);
+
+			api.registerCompetition(plugin, capComp, capComp, Arena.class, null,
+					new File(compDir+"/"+capComp+"Config.yml"),
+					new File(compDir+"/"+capComp+"Messages.yml"),
+					new File("/default_files/competitions/"+capComp+"Config.yml"),
+					new File(dir.getPath()+"/saves/arenas.yml"));
+			exclude.add(capComp+"Config.yml");
+		}
+
+		/// These commands arent specified in the config, so manually add.
+		ArenaType.addAliasForType("FreeForAll","ffa");
+		ArenaType.addAliasForType("DeathMatch","dm");
+		ArenaType.addAliasForType("Colosseum","col");
+		ArenaType.addAliasForType("Colosseum","Colliseum");
+
+		/// And lastly.. add our tournament which is different than the rest
+		createTournament(plugin, dir);
+	}
+
+	private void createTournament(JavaPlugin plugin, File dir) {
+		File cf = FileUtil.load(BattleArena.getSelf().getClass(),dir.getPath()+"/competitions/TourneyConfig.yml",
+				"/default_files/competitions/TourneyConfig.yml");
+		ConfigSerializer cs = new ConfigSerializer(plugin,cf, "Tourney");
+		MatchParams mp;
 		try {
-			setTypeConfig(plugin,"tourney",config.getConfigurationSection("tourney"), false);
+			mp = cs.loadType();
+			EventParams ep = new EventParams(mp);
+			TournamentEvent tourney = new TournamentEvent(ep);
+			EventController.addEvent(tourney);
+			try{
+				EventExecutor executor = new TournamentExecutor();
+				BattleArena.getSelf().getCommand("tourney").setExecutor(executor);
+				EventController.addEventExecutor(tourney.getParams(), executor);
+				ParamController.addMatchType(ep);
+			} catch (Exception e){
+				Log.err("Tourney could not be added");
+			}
 		} catch (Exception e) {
 			e.printStackTrace();
-		}
-
-		/// Now initialize the specific types
-		for (String defaultType: allTypes){
-			boolean isMatch = defaultMatchTypes.contains(defaultType);
-			try {
-				api.registerCompetition(plugin, defaultType, defaultType, Arena.class, null, this.getFile(), isMatch,true);
-			} catch (Exception e) {
-				Log.err("Couldnt configure arenaType " + defaultType+". " + e.getMessage());
-				e.printStackTrace();
-			}
-		}
-
-		/// Initialize custom matches or events
-		Set<String> keys = config.getKeys(false);
-		for (String key: keys){
-			ConfigurationSection cs = config.getConfigurationSection(key);
-			if (cs == null || allTypes.contains(key) || exclude.contains(key))
-				continue;
-			try {
-				String cmd = config.getString(key+".command",null);
-				cmd = config.getString(key+".cmd",cmd);
-				if (cmd==null || cmd.isEmpty()){
-					throw new InvalidOptionException("For a custom competition you must specify a command:");}
-				api.registerCompetition(plugin, key, cmd, Arena.class, null, this.getFile(), true,true);
-			} catch (Exception e) {
-				Log.err("Couldnt configure arenaType " + key+". " + e.getMessage());
-				e.printStackTrace();
-			}
 		}
 	}
 
@@ -110,7 +138,7 @@ public class BAConfigSerializer extends ConfigSerializer{
 		Defaults.SECONDS_TO_LOOT = cs.getInt("secondsToLoot", Defaults.SECONDS_TO_LOOT);
 		Defaults.MATCH_TIME = cs.getInt("matchTime", Defaults.MATCH_TIME);
 		Defaults.MATCH_UPDATE_INTERVAL = cs.getInt("matchUpdateInterval", Defaults.MATCH_UPDATE_INTERVAL);
-//		Defaults.MATCH_FORCESTART_ENABLED = cs.getBoolean("matchEnableForceStart", Defaults.MATCH_FORCESTART_ENABLED);
+		//		Defaults.MATCH_FORCESTART_ENABLED = cs.getBoolean("matchEnableForceStart", Defaults.MATCH_FORCESTART_ENABLED);
 		Defaults.MATCH_FORCESTART_TIME = cs.getLong("matchForceStartTime", Defaults.MATCH_FORCESTART_TIME);
 		Defaults.TIME_BETWEEN_CLASS_CHANGE = cs.getInt("timeBetweenClassChange", Defaults.TIME_BETWEEN_CLASS_CHANGE);
 
@@ -176,11 +204,11 @@ public class BAConfigSerializer extends ConfigSerializer{
 			tops.addOption(TransitionOption.STOREHEALTH);
 			tops.addOption(TransitionOption.STOREHUNGER);
 			tops.addOption(TransitionOption.STOREMAGIC);
-//			tops.addOption(TransitionOption.CLEARINVENTORYONFIRSTENTER);
 			tops.addOption(TransitionOption.CLEARINVENTORY);
 			tops.addOption(TransitionOption.CLEAREXPERIENCE);
 			tops.addOption(TransitionOption.STOREITEMS);
 			tops.addOption(TransitionOption.DEENCHANT);
+			tops.addOption(TransitionOption.FLIGHTOFF);
 			OptionSetController.addOptionSet("storeAll", tops);
 
 			tops = new TransitionOptions();

@@ -5,8 +5,8 @@ import java.util.Collection;
 import mc.alk.arena.BattleArena;
 import mc.alk.arena.competition.match.Match;
 import mc.alk.arena.events.matches.MatchFindCurrentLeaderEvent;
-import mc.alk.arena.listeners.ArenaListener;
 import mc.alk.arena.objects.ArenaPlayer;
+import mc.alk.arena.objects.arenas.ArenaListener;
 import mc.alk.arena.objects.events.EventPriority;
 import mc.alk.arena.objects.events.MatchEventHandler;
 import mc.alk.arena.objects.teams.Team;
@@ -47,6 +47,7 @@ public class PvPCount implements ArenaListener{
 
 	@MatchEventHandler(priority = EventPriority.LOW)
 	public void onFindCurrentLeader(MatchFindCurrentLeaderEvent event) {
+
 		Collection<Team> leaders = VictoryUtil.getLeaderByHighestKills(match);
 		if (leaders.size() > 1){
 			event.setCurrentDrawers(leaders);

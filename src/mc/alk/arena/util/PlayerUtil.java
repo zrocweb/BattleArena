@@ -3,6 +3,7 @@ package mc.alk.arena.util;
 import java.util.List;
 
 import mc.alk.arena.Defaults;
+import mc.alk.arena.controllers.EssentialsController;
 import mc.alk.arena.controllers.HeroesController;
 import mc.alk.arena.objects.CommandLineString;
 
@@ -35,7 +36,11 @@ public class PlayerUtil {
 	}
 
 	public static void setHealth(final Player player, final Integer health) {
-		if (HeroesController.enabled()){
+		setHealth(player,health,false);
+	}
+
+	public static void setHealth(final Player player, final Integer health, boolean skipHeroes) {
+		if (!skipHeroes && HeroesController.enabled()){
 			HeroesController.setHealth(player,health);
 			return;
 		}
@@ -59,7 +64,12 @@ public class PlayerUtil {
 	}
 
 	public static Integer getHealth(Player player) {
-		return HeroesController.enabled() ? HeroesController.getHealth(player) : player.getHealth();
+		return getHealth(player,false);
+	}
+
+	public static Integer getHealth(Player player, boolean skipHeroes) {
+		return !skipHeroes && HeroesController.enabled() ?
+				HeroesController.getHealth(player) : player.getHealth();
 	}
 
 	public static void setInvulnerable(Player player, Integer invulnerableTime) {
@@ -68,8 +78,10 @@ public class PlayerUtil {
 	}
 
 	public static void setGameMode(Player p, GameMode gameMode) {
-		PermissionsUtil.givePlayerInventoryPerms(p);
-		p.setGameMode(gameMode);
+		if (p.getGameMode() != gameMode){
+			PermissionsUtil.givePlayerInventoryPerms(p);
+			p.setGameMode(gameMode);
+		}
 	}
 
 	public static void doCommands(Player p, List<CommandLineString> doCommands) {
@@ -85,6 +97,24 @@ public class PlayerUtil {
 			}
 
 		}
+	}
+
+	public static void setFlight(Player player, boolean enable) {
+		if (player.getAllowFlight() != enable){
+			player.setAllowFlight(enable);}
+		if (player.isFlying() != enable){
+			player.setFlying(enable);}
+		/* Essentials (v2.10) fly just goes through bukkit, no need to call Essentials setFlight */
+	}
+
+	public static void setFlightSpeed(Player player, Float flightSpeed) {
+		player.setFlySpeed(flightSpeed);
+		/* Essentials (v2.10) fly just goes through bukkit, no need to call Essentials setFlySpeed */
+	}
+
+	public static void setGod(Player player, boolean enable) {
+		if (EssentialsController.enabled()){
+			EssentialsController.setGod(player, enable);}
 	}
 
 }

@@ -12,7 +12,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 
-public class BAClassesSerializer extends BaseSerializer{
+public class BAClassesSerializer extends BaseConfig{
 
 	public void loadAll(){
 		try {config.load(file);} catch (Exception e){e.printStackTrace();}
@@ -50,8 +50,8 @@ public class BAClassesSerializer extends BaseSerializer{
 	public ArenaClass parseArenaClass(ConfigurationSection cs) {
 		List<ItemStack> items = null;
 		List<PotionEffect> effects = null;
-		if (cs.contains("items")){ items = BAConfigSerializer.getItemList(cs,"items");}
-		if (cs.contains("enchants")){ effects = BAConfigSerializer.getEffectList(cs,"enchants");}
+		if (cs.contains("items")){ items = ConfigSerializer.getItemList(cs,"items");}
+		if (cs.contains("enchants")){ effects = ConfigSerializer.getEffectList(cs,"enchants");}
 		String displayName = cs.getString("displayName", null);
 		if (displayName==null) cs.getString("prettyName", null);
 		ArenaClass ac = new ArenaClass(cs.getName(),displayName, items,effects);

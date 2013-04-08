@@ -82,13 +82,16 @@ public class TransitionOptions {
 	public boolean clearInventory() {return options.containsKey(TransitionOption.CLEARINVENTORY);}
 	public boolean needsArmor() {return options.containsKey(TransitionOption.NEEDARMOR);}
 	public boolean needsItems() {return options.containsKey(TransitionOption.NEEDITEMS);}
-	public boolean hasItems() {return options.containsKey(TransitionOption.NEEDITEMS) || options.containsKey(TransitionOption.GIVEITEMS);}
+	public boolean hasItems() {
+		return options.containsKey(TransitionOption.NEEDITEMS) ||
+				options.containsKey(TransitionOption.GIVEITEMS);}
 	public boolean shouldTeleportWaitRoom() {return options.containsKey(TransitionOption.TELEPORTWAITROOM);}
 	public boolean shouldTeleportIn() {return options.containsKey(TransitionOption.TELEPORTIN);}
 	public boolean teleportsIn() {return shouldTeleportIn() || shouldTeleportWaitRoom();}
 
 	public boolean shouldTeleportOut() {
-		return options.containsKey(TransitionOption.TELEPORTOUT) || options.containsKey(TransitionOption.TELEPORTBACK) ||
+		return options.containsKey(TransitionOption.TELEPORTOUT) ||
+				options.containsKey(TransitionOption.TELEPORTBACK) ||
 				options.containsKey(TransitionOption.TELEPORTTO);
 	}
 
@@ -117,6 +120,11 @@ public class TransitionOptions {
 		return o == null ? null : (Double) o;
 	}
 
+	public Float getFloat(TransitionOption option){
+		final Object o = options.get(option);
+		return o == null ? null : (Float) o;
+	}
+
 	public String getString(TransitionOption option){
 		final Object o = options.get(option);
 		return o == null ? null : (String) o;
@@ -132,6 +140,7 @@ public class TransitionOptions {
 		Double d = getDouble(TransitionOption.MONEY);
 		return d != null && d > 0;
 	}
+	public Float getFlightSpeed(){return getFloat(TransitionOption.FLIGHTSPEED);}
 	public Integer getInvulnerable(){return getInt(TransitionOption.INVULNERABLE);}
 	public Integer getExperience(){return getInt(TransitionOption.EXPERIENCE);}
 	public boolean hasExperience(){return options.containsKey(TransitionOption.EXPERIENCE);}
@@ -153,6 +162,11 @@ public class TransitionOptions {
 		/// Inside MobArena?
 		if (MobArenaInterface.hasMobArena() && MobArenaInterface.insideMobArena(p)){
 			return false;
+		}
+		if (options.containsKey(TransitionOption.GAMEMODE)){
+			GameMode gm = getGameMode();
+			if (p.getPlayer().getGameMode() != gm){
+				return false;}
 		}
 
 		if (options.containsKey(TransitionOption.NOINVENTORY)){
@@ -194,7 +208,11 @@ public class TransitionOptions {
 			hasSomething = true;
 			sb.append("&5 - &6Clear Inventory");
 		}
-
+		if (options.containsKey(TransitionOption.GAMEMODE)){
+			hasSomething = true;
+			GameMode gm = getGameMode();
+			sb.append("&5 - &6GameMode="+gm.toString());
+		}
 		if (needsArmor()){
 			hasSomething = true;
 			sb.append("&5 - &6Armor");
@@ -203,8 +221,6 @@ public class TransitionOptions {
 			MinMax mm = (MinMax) options.get(TransitionOption.LEVELRANGE);
 			sb.append("&a - lvl="+mm.toString());
 		}
-
-		sb.append("&5 - &6Armor");
 		return hasSomething ? sb.toString() : null;
 	}
 
@@ -222,6 +238,13 @@ public class TransitionOptions {
 					sb.append("&5 - &e"+needed +" " + is.getType() + "\n");
 					isReady = false;
 				}
+			}
+		}
+		if (options.containsKey(TransitionOption.GAMEMODE)){
+			GameMode gm = getGameMode();
+			if (p.getPlayer().getGameMode() != gm){
+				sb.append("&5 -&e a &6You need to be in &c"+gm+"&e mode \n");
+				isReady = false;
 			}
 		}
 		if (options.containsKey(TransitionOption.NOINVENTORY)){
@@ -316,7 +339,8 @@ public class TransitionOptions {
 		return options.containsKey(TransitionOption.RESPAWN);
 	}
 	public boolean randomRespawn() {
-		return options.containsKey(TransitionOption.RANDOMRESPAWN);
+		return options.containsKey(TransitionOption.RANDOMRESPAWN) ||
+				options.containsKey(TransitionOption.RANDOMSPAWN);
 	}
 
 	public Boolean deEnchant() {

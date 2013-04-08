@@ -2,18 +2,19 @@ package mc.alk.arena.listeners;
 
 import mc.alk.arena.BattleArena;
 import mc.alk.arena.Defaults;
+import mc.alk.arena.controllers.EssentialsController;
 import mc.alk.arena.controllers.FactionsController;
 import mc.alk.arena.controllers.HeroesController;
 import mc.alk.arena.controllers.MobArenaInterface;
 import mc.alk.arena.controllers.MoneyController;
 import mc.alk.arena.controllers.PylamoController;
+import mc.alk.arena.controllers.StatController;
 import mc.alk.arena.controllers.TagAPIController;
 import mc.alk.arena.controllers.WorldGuardController;
 import mc.alk.arena.objects.messaging.AnnouncementOptions;
-import mc.alk.arena.util.BTInterface;
 import mc.alk.arena.util.DisguiseInterface;
 import mc.alk.arena.util.Log;
-import mc.alk.tracker.Tracker;
+import mc.alk.arena.util.PermissionsUtil;
 import net.milkbowl.vault.chat.Chat;
 import net.milkbowl.vault.economy.Economy;
 
@@ -23,8 +24,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.server.PluginEnableEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredServiceProvider;
-
-import pgDev.bukkit.DisguiseCraft.DisguiseCraft;
 
 import com.dthielke.herochat.Herochat;
 
@@ -40,6 +39,8 @@ public class BAPluginListener implements Listener {
 	public void onPluginEnable(PluginEnableEvent event) {
 		if (event.getPlugin().getName() == "BattleTracker")
 			loadBattleTracker();
+		else if (event.getPlugin().getName() == "Essentials")
+			loadEssentials();
 		else if (event.getPlugin().getName() == "Factions")
 			loadFactions();
 		else if (event.getPlugin().getName() == "Herochat")
@@ -58,8 +59,6 @@ public class BAPluginListener implements Listener {
 			loadMultiverseInventory();
 		else if (event.getPlugin().getName() == "PylamoRestorationSystem")
 			loadPylamoRestoration();
-		else if (event.getPlugin().getName() == "Register")
-			loadRegister();
 		else if (event.getPlugin().getName() == "TagAPI")
 			loadTagAPI();
 		else if (event.getPlugin().getName() == "WorldEdit")
@@ -73,6 +72,7 @@ public class BAPluginListener implements Listener {
 	public void loadAll(){
 		loadBattleTracker();
 		loadDisguiseCraft();
+		loadEssentials();
 		loadFactions();
 		loadHeroChat();
 		loadHeroes();
@@ -81,7 +81,6 @@ public class BAPluginListener implements Listener {
 		loadMultiverseCore();
 		loadMultiverseInventory();
 		loadPylamoRestoration();
-		loadRegister();
 		loadTagAPI();
 		loadWorldEdit();
 		loadWorldGuard();
@@ -90,10 +89,10 @@ public class BAPluginListener implements Listener {
 
 
 	public void loadBattleTracker(){
-		if (BTInterface.battleTracker == null){
+		if (!StatController.enabled()){
 			Plugin plugin = Bukkit.getPluginManager().getPlugin("BattleTracker");
 			if (plugin != null) {
-				BTInterface.battleTracker = (Tracker) plugin;
+				StatController.setPlugin(plugin);
 			} else {
 				Log.info("[BattleArena] BattleTracker not detected, not tracking wins");
 			}
@@ -101,11 +100,24 @@ public class BAPluginListener implements Listener {
 	}
 
 	public void loadDisguiseCraft(){
-		if (DisguiseInterface.disguiseInterface == null){
+		if (!DisguiseInterface.enabled()){
 			Plugin plugin = Bukkit.getPluginManager().getPlugin("DisguiseCraft");
 			if (plugin != null) {
-				DisguiseInterface.disguiseInterface = DisguiseCraft.getAPI();
+				DisguiseInterface.setDisguiseCraft(plugin);
 				Log.info("[BattleArena] DisguiseCraft detected, enabling disguises");
+			}
+		}
+	}
+
+	public void loadEssentials(){
+		if (!EssentialsController.enabled()){
+			Plugin plugin = Bukkit.getPluginManager().getPlugin("Essentials");
+			if (plugin != null) {
+				if (EssentialsController.enableEssentials(plugin)){
+					Log.info("[BattleArena] Essentials detected. God mode handling activated");
+				} else {
+					Log.info("[BattleArena] Essentials detected but could not hook properly");
+				}
 			}
 		}
 	}
@@ -193,16 +205,6 @@ public class BAPluginListener implements Listener {
 		}
 	}
 
-	public void loadRegister(){
-		if (!MoneyController.hasVaultEconomy() && !MoneyController.hasRegisterEconomy()){
-			Plugin plugin = Bukkit.getPluginManager().getPlugin("Register");
-			if (plugin != null){
-				MoneyController.setRegisterEconomy();
-				Log.info(BattleArena.getPluginName() +" found economy plugin Register");
-			}
-		}
-	}
-
 	public void loadWorldEdit(){
 		if (!WorldGuardController.hasWorldEdit()){
 			Plugin plugin = Bukkit.getPluginManager().getPlugin("WorldEdit");
@@ -239,7 +241,7 @@ public class BAPluginListener implements Listener {
 		Plugin plugin = Bukkit.getPluginManager().getPlugin("Vault");
 		if (plugin != null ){
 			/// Load vault economy
-			if (!MoneyController.hasVaultEconomy()){
+			if (!MoneyController.hasEconomy()){
 				try{
 					RegisteredServiceProvider<Economy> provider = Bukkit.getServer().
 							getServicesManager().getRegistration(net.milkbowl.vault.economy.Economy.class);
@@ -270,6 +272,8 @@ public class BAPluginListener implements Listener {
 					e.printStackTrace();
 				}
 			}
+			/// Load Vault Permissions
+			PermissionsUtil.setPermission(plugin);
 		}
 	}
 
