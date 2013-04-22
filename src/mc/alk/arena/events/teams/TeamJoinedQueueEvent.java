@@ -1,19 +1,20 @@
-package mc.alk.arena.events;
+package mc.alk.arena.events.teams;
 
+import mc.alk.arena.events.BAEvent;
 import mc.alk.arena.objects.ArenaParams;
 import mc.alk.arena.objects.pairs.QueueResult;
-import mc.alk.arena.objects.teams.Team;
+import mc.alk.arena.objects.teams.ArenaTeam;
 
 public class TeamJoinedQueueEvent extends BAEvent{
-	final Team team;
+	final ArenaTeam team;
 	final int playersInQueue;
 	final int teamsInQueue;
 	final int pos;
 	final Long timeToStart;
 	final ArenaParams params;
 
-	public TeamJoinedQueueEvent(QueueResult qpp) {
-		this.team = qpp.team;
+	public TeamJoinedQueueEvent(ArenaTeam team, QueueResult qpp) {
+		this.team = team;
 		this.playersInQueue = qpp.playersInQueue;
 		this.pos = qpp.pos;
 		this.timeToStart = qpp.time;
@@ -22,7 +23,7 @@ public class TeamJoinedQueueEvent extends BAEvent{
 	}
 
 
-	public Team getTeam() {
+	public ArenaTeam getTeam() {
 		return team;
 	}
 
@@ -42,9 +43,7 @@ public class TeamJoinedQueueEvent extends BAEvent{
 		return params;
 	}
 
-
 	public int getTeamsInQueue() {
 		return teamsInQueue;
 	}
-
 }

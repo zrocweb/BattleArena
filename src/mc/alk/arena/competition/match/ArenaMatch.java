@@ -11,11 +11,12 @@ import mc.alk.arena.Defaults;
 import mc.alk.arena.Permissions;
 import mc.alk.arena.controllers.ArenaClassController;
 import mc.alk.arena.controllers.WorldGuardController;
-import mc.alk.arena.events.PlayerLeftEvent;
-import mc.alk.arena.events.PlayerReadyEvent;
 import mc.alk.arena.events.matches.MatchClassSelectedEvent;
 import mc.alk.arena.events.matches.MatchPlayersReadyEvent;
-import mc.alk.arena.listeners.BAPlayerListener;
+import mc.alk.arena.events.players.ArenaPlayerDeathEvent;
+import mc.alk.arena.events.players.ArenaPlayerKillEvent;
+import mc.alk.arena.events.players.ArenaPlayerReadyEvent;
+import mc.alk.arena.events.teams.TeamDeathEvent;
 import mc.alk.arena.objects.ArenaClass;
 import mc.alk.arena.objects.ArenaPlayer;
 import mc.alk.arena.objects.MatchParams;
@@ -26,14 +27,13 @@ import mc.alk.arena.objects.events.EventPriority;
 import mc.alk.arena.objects.events.MatchEventHandler;
 import mc.alk.arena.objects.options.TransitionOption;
 import mc.alk.arena.objects.options.TransitionOptions;
-import mc.alk.arena.objects.teams.Team;
+import mc.alk.arena.objects.teams.ArenaTeam;
 import mc.alk.arena.util.CommandUtil;
 import mc.alk.arena.util.DmgDeathUtil;
 import mc.alk.arena.util.EffectUtil;
 import mc.alk.arena.util.InventoryUtil;
 import mc.alk.arena.util.Log;
 import mc.alk.arena.util.MessageUtil;
-import mc.alk.arena.util.NotifierUtil;
 import mc.alk.arena.util.PermissionsUtil;
 import mc.alk.arena.util.TeamUtil;
 
@@ -53,7 +53,6 @@ import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.PotionSplashEvent;
-import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
@@ -64,6 +63,10 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.ItemStack;
 
 
+/**
+ * TODO once I add in GameLogic, transfer all of this into a module
+ *
+ */
 public class ArenaMatch extends Match {
 	static HashSet<String> disabledCommands = new HashSet<String>();
 
@@ -76,72 +79,90 @@ public class ArenaMatch extends Match {
 
 	@MatchEventHandler(priority=EventPriority.HIGH)
 	public void onPlayerQuit(PlayerQuitEvent event){
-		ArenaPlayer player = BattleArena.toArenaPlayer(event.getPlayer());
-		if (woolTeams)
-			BAPlayerListener.clearWoolOnReenter(player.getName(), teams.indexOf(getTeam(player)));
 		/// If they are just in the arena waiting for match to start, or they havent joined yet
 		if (state == MatchState.ONCOMPLETE || state == MatchState.ONCANCEL ||
-				state == MatchState.ONOPEN || !insideArena.contains(player.getName())){
+				!insideArena.contains(event.getPlayer().getName())){
 			return;}
-		Team t = getTeam(player);
+		ArenaPlayer player = BattleArena.toArenaPlayer(event.getPlayer());
+		ArenaTeam t = getTeam(player);
 		if (t==null){
 			return;}
-		t.killMember(player);
-		PerformTransition.transition(this, MatchState.ONCOMPLETE, player, t, true);
-		callEvent(new PlayerLeftEvent(player));
+
+		PerformTransition.transition(this, MatchState.ONCANCEL, player, t, true);
+		checkAndHandleIfTeamDead(t);
 	}
 
 	@MatchEventHandler(suppressCastWarnings=true,priority=EventPriority.HIGH)
 	public void onPlayerDeath(PlayerDeathEvent event, final ArenaPlayer target){
-		if (state == MatchState.ONCANCEL || state == MatchState.ONCOMPLETE || !insideArena.contains(target.getName())){
+		if (state == MatchState.ONCANCEL || state == MatchState.ONCOMPLETE ||
+				!insideArena.contains(target.getName())){
 			return;}
 
-		if (cancelExpLoss)
-			event.setKeepLevel(true);
-
-		final Team t = getTeam(target);
+		final ArenaTeam t = getTeam(target);
 		if (t==null)
 			return;
-		Integer nDeaths = t.getNDeaths(target);
-//		Log.debug("   nDeaths ='" + nDeaths +"    " + nLivesPerPlayer);
-		boolean exiting = !respawns || (nDeaths != null && nDeaths >= nLivesPerPlayer);
 
-		/// If keepInventory is specified, but not restoreAll, then we have a case
-		/// where we need to give them back the current Inventory they have on them
-		/// even if they log out
-		if (keepsInventory){
-			boolean restores = getParams().getTransitionOptions().hasAnyOption(TransitionOption.RESTOREALL);
-			/// Restores and exiting, means clear their match inventory so they won't
-			/// get their match and their already stored inventory
-			if (restores && exiting){
-				psc.clearMatchItems(target);
-			} else { /// keep their current inv
-				psc.storeMatchItems(target);
+		ArenaPlayerDeathEvent apde = new ArenaPlayerDeathEvent(target,t);
+		apde.setPlayerDeathEvent(event);
+		callEvent(apde);
+		ArenaPlayer killer = DmgDeathUtil.getPlayerCause(event);
+		if (killer != null){
+			ArenaTeam killT = getTeam(killer);
+			if (killT != null){ /// they must be in the same match for this to count
+				killT.addKill(killer);
+				callEvent(new ArenaPlayerKillEvent(killer,killT,target));
 			}
 		}
+	}
 
-		/// Handle Drops from bukkitEvent
-		if (clearsInventoryOnDeath || keepsInventory){ /// clear the drops
-			try {event.getDrops().clear();} catch (Exception e){}
-		} else if (woolTeams){  /// Get rid of the wool from teams so it doesnt drop
-			final int index = teams.indexOf(t);
-			ItemStack teamHead = TeamUtil.getTeamHead(index);
-			List<ItemStack> items = event.getDrops();
-			for (ItemStack is : items){
-				if (is.getType() == teamHead.getType() && is.getDurability() == teamHead.getDurability()){
-					final int amt = is.getAmount();
-					if (amt > 1)
-						is.setAmount(amt-1);
-					else
-						is.setType(Material.AIR);
-					break;
+	@MatchEventHandler(priority=EventPriority.HIGH)
+	public void onPlayerDeath(ArenaPlayerDeathEvent event){
+		final ArenaPlayer target = event.getPlayer();
+		if (state == MatchState.ONCANCEL || state == MatchState.ONCOMPLETE ||
+				!insideArena.contains(target.getName())){
+			return;}
+		final ArenaTeam t = event.getTeam();
+
+		Integer nDeaths = t.addDeath(target);
+		boolean exiting = !respawns || (nDeaths != null && nDeaths >= nLivesPerPlayer);
+		boolean trueDeath = event.getPlayerDeathEvent() != null;
+
+		if (trueDeath){
+			PlayerDeathEvent pde = event.getPlayerDeathEvent();
+			if (cancelExpLoss)
+				pde.setKeepLevel(true);
+
+			/// Handle Drops from bukkitEvent
+			if (clearsInventoryOnDeath || keepsInventory){ /// clear the drops
+				try {pde.getDrops().clear();} catch (Exception e){}
+			} else if (woolTeams){  /// Get rid of the wool from teams so it doesnt drop
+				final int index = teams.indexOf(t);
+				ItemStack teamHead = TeamUtil.getTeamHead(index);
+				List<ItemStack> items = pde.getDrops();
+				for (ItemStack is : items){
+					if (is.getType() == teamHead.getType() && is.getDurability() == teamHead.getDurability()){
+						final int amt = is.getAmount();
+						if (amt > 1)
+							is.setAmount(amt-1);
+						else
+							is.setType(Material.AIR);
+						break;
+					}
 				}
 			}
-		}
-
-		if (exiting){
-			PerformTransition.transition(this, MatchState.ONCOMPLETE, target, t, true);
-		} else {
+			/// If keepInventory is specified, but not restoreAll, then we have a case
+			/// where we need to give them back the current Inventory they have on them
+			/// even if they log out
+			if (keepsInventory){
+				boolean restores = getParams().getTransitionOptions().hasAnyOption(TransitionOption.RESTOREALL);
+				/// Restores and exiting, means clear their match inventory so they won't
+				/// get their match and their already stored inventory
+				if (restores && exiting){
+					psc.clearMatchItems(target);
+				} else { /// keep their current inv
+					psc.storeMatchItems(target);
+				}
+			}
 			/// We can't let them just sit on the respawn screen... schedule them to lose
 			/// We will cancel this onRespawn
 			final ArenaMatch am = this;
@@ -153,14 +174,21 @@ public class ArenaMatch extends Match {
 				@Override
 				public void run() {
 					PerformTransition.transition(am, MatchState.ONCOMPLETE, target, t, true);
+					if (t.isDead()){
+						callEvent(new TeamDeathEvent(t));}
 				}
 			}, 15*20L);
 			deathTimer.put(target.getName(), timer);
 		}
+
+		if (exiting){
+			PerformTransition.transition(this, MatchState.ONCOMPLETE, target, t, true);
+			checkAndHandleIfTeamDead(t);
+		}
 	}
 
-	@MatchEventHandler(suppressCastWarnings=true,priority=EventPriority.HIGH)
-	public void onEntityDamage(EntityDamageEvent event) {
+	@MatchEventHandler(suppressCastWarnings=true,priority=EventPriority.LOW)
+	public void onEntityDamageByEntity(EntityDamageEvent event) {
 		if (!(event.getEntity() instanceof Player))
 			return;
 		final TransitionOptions to = tops.getOptions(state);
@@ -181,17 +209,16 @@ public class ArenaMatch extends Match {
 			return;}
 
 		final Entity damagerEntity = ((EntityDamageByEntityEvent)event).getDamager();
-
 		ArenaPlayer damager=null;
 		switch(pvp){
 		case ON:
-			Team targetTeam = getTeam(target);
+			ArenaTeam targetTeam = getTeam(target);
 			if (targetTeam == null || !targetTeam.hasAliveMember(target)) /// We dont care about dead players
 				return;
 			damager = DmgDeathUtil.getPlayerCause(damagerEntity);
 			if (damager == null){ /// damage from some source, its not pvp though. so we dont care
 				return;}
-			Team t = getTeam(damager);
+			ArenaTeam t = getTeam(damager);
 			if (t != null && t.hasMember(target)){ /// attacker is on the same team
 				event.setCancelled(true);
 			} else {/// different teams... lets make sure they can actually hit
@@ -209,6 +236,55 @@ public class ArenaMatch extends Match {
 			break;
 		}
 	}
+
+//	@MatchEventHandler(suppressCastWarnings=true,priority=EventPriority.HIGHER)
+//	public void onCheckEmulateDeath(EntityDamageEvent event) {
+//		//		Log.debug("############## checking emulate   " + event.getEntity() +"    " + event.isCancelled() +"    " + event.getDamage());
+//		if (event.isCancelled() || event.getDamage() <= 0 || !(event.getEntity() instanceof Player))
+//			return;
+//		Player target = ((Player) event.getEntity());
+//		//		Log.debug("############## checking health   " + event.getDamage() +"    " + target.getHealth());
+//		if (event.getDamage() < target.getHealth()){
+//			return;}
+//
+//		PlayerInventory pinv = target.getInventory();
+//		ArenaPlayer ap = BattleArena.toArenaPlayer(target);
+//		ArenaTeam targetTeam = getTeam(ap);
+//		if (clearsInventoryOnDeath){
+//			pinv.clear();
+//			if (woolTeams){
+//				if (targetTeam != null && targetTeam.getHeadItem() != null){
+//					TeamUtil.setTeamHead(targetTeam.getHeadItem(), target);
+//				}
+//			}
+//		}
+//
+//		Integer nDeaths = targetTeam.getNDeaths(ap);
+//		boolean exiting = !respawns || (nDeaths != null && nDeaths +1 >= nLivesPerPlayer);
+//
+//		ArenaPlayerDeathEvent apde = new ArenaPlayerDeathEvent(ap,targetTeam);
+//		callEvent(apde);
+//		ArenaPlayer killer = DmgDeathUtil.getPlayerCause(event);
+//		if (killer != null){
+//			ArenaTeam killT = getTeam(killer);
+//			if (killT != null){ /// they must be in the same match for this to count
+//				killT.addKill(killer);
+//				callEvent(new ArenaPlayerKillEvent(killer,killT,ap));
+//			}
+//		}
+//		PerformTransition.transition(this, MatchState.ONDEATH, ap, targetTeam , false);
+//		PerformTransition.transition(this, MatchState.ONDEATH, ap, targetTeam , false);
+//
+//		EffectUtil.deEnchantAll(target);
+//		target.closeInventory();
+//		target.setFireTicks(0);
+//		target.setHealth(target.getMaxHealth());
+//		if (!exiting){
+//			final int teamIndex = indexOf(targetTeam);
+//			final Location l = PerformTransition.jitter(getTeamSpawn(teamIndex,false),rand.nextInt(targetTeam.size()));
+//			TeleportController.teleportPlayer(target, l, false, true);
+//		}
+//	}
 
 	@MatchEventHandler(priority=EventPriority.HIGH)
 	public void onPlayerRespawn(PlayerRespawnEvent event, final ArenaPlayer p){
@@ -230,7 +306,7 @@ public class ArenaMatch extends Match {
 			final Match am = this;
 			Bukkit.getScheduler().scheduleSyncDelayedTask(BattleArena.getSelf(), new Runnable() {
 				public void run() {
-					Team t = getTeam(p);
+					ArenaTeam t = getTeam(p);
 					try{
 						PerformTransition.transition(am, MatchState.ONDEATH, p, t , false);
 						PerformTransition.transition(am, MatchState.ONSPAWN, p, t, false);
@@ -270,9 +346,6 @@ public class ArenaMatch extends Match {
 
 	@MatchEventHandler(priority=EventPriority.HIGH)
 	public void onPlayerBlockBreak(BlockBreakEvent event){
-		NotifierUtil.notify("blockbreak", event.getPlayer().getName() + "  stage= "+
-				state + "  breaking block.. cancelled " + event.isCancelled() +"    contains=" +
-				tops.hasOptionAt(state, TransitionOption.BLOCKBREAKOFF));
 		if (tops.hasOptionAt(state, TransitionOption.BLOCKBREAKOFF)){
 			event.setCancelled(true);}
 	}
@@ -287,12 +360,6 @@ public class ArenaMatch extends Match {
 	public void onPlayerDropItem(PlayerDropItemEvent event){
 		if (tops.hasOptionAt(state, TransitionOption.ITEMDROPOFF)){
 			event.setCancelled(true);}
-	}
-
-	@MatchEventHandler(priority=EventPriority.HIGH)
-	public void onPlayerInventoryClick(InventoryClickEvent event, ArenaPlayer p) {
-		if (woolTeams && event.getSlot() == 39/*Helm Slot*/)
-			event.setCancelled(true);
 	}
 
 	@MatchEventHandler(priority=EventPriority.HIGH)
@@ -358,6 +425,8 @@ public class ArenaMatch extends Match {
 	}
 
 	private void readyClick(PlayerInteractEvent event) {
+		if (!Defaults.ENABLE_PLAYER_READY_BLOCK)
+			return;
 		if (!isInWaitRoomState()){
 			return;}
 		final Action action = event.getAction();
@@ -370,7 +439,7 @@ public class ArenaMatch extends Match {
 		MessageUtil.sendMessage(ap, "&2You ready yourself for the arena");
 		int size = getAlivePlayers().size();
 		if (size == readyPlayers.size()){
-			new MatchPlayersReadyEvent(this).callEvent();
+			callEvent(new MatchPlayersReadyEvent(this));
 		}
 	}
 
@@ -440,9 +509,9 @@ public class ArenaMatch extends Match {
 		/// Regive class/items
 		ArenaClassController.giveClass(p, ac);
 		if (mo != null && mo.hasItems()){
-			try{ InventoryUtil.addItemsToInventory(p, mo.getGiveItems(), true,color);} catch(Exception e){e.printStackTrace();}}
+			try{ InventoryUtil.addItemsToInventory(p, mo.getGiveItems(), true,color);} catch(Exception e){Log.printStackTrace(e);}}
 		if (ro != null && ro.hasItems()){
-			try{ InventoryUtil.addItemsToInventory(p, ro.getGiveItems(), true,color);} catch(Exception e){e.printStackTrace();}}
+			try{ InventoryUtil.addItemsToInventory(p, ro.getGiveItems(), true,color);} catch(Exception e){Log.printStackTrace(e);}}
 
 		/// Deal with effects/buffs
 		if (mo != null && mo.getEffects()!=null){
@@ -489,11 +558,11 @@ public class ArenaMatch extends Match {
 	}
 
 	@MatchEventHandler
-	public void onPlayerReady(PlayerReadyEvent event){
+	public void onPlayerReady(ArenaPlayerReadyEvent event){
 		if (!Defaults.ENABLE_PLAYER_READY_BLOCK){
 			return;}
 		int tcount = 0;
-		for (Team t: teams){
+		for (ArenaTeam t: teams){
 			if (!t.isReady())
 				return;
 			if (t.size() > 0)

@@ -1,7 +1,7 @@
 configVersion: 2.2
 
 # For help the wiki is a good source of information
-# Wiki: # https://github.com/alkarinv/BattleArena/wiki
+# Wiki: # http://battleplugins.com/w/index.php/BattleArena
 
 # Updates will be retrieved from the latest plugin on the bukkit site
 autoUpdate: true
@@ -20,7 +20,7 @@ teleportYOffset: 0.0
 numberSavedInventories: 5
 
 # which player commands should be disabled when they enter an arena
-disabledCommands: [home, spawn, payhome, warp, watch, sethome, ma]
+disabledCommands: [home, spawn, payhome, warp, watch, sethome, ma, f, factions]
 
 # What commands should be disabled when the player is inside of a queue, but not in a match
 disabledQueueCommands: []
@@ -70,7 +70,7 @@ defaultOptions:
     ## have joined.  Example: say 2 teams of 4 people each is needed, if after
     ## the forceStartTime is exceeded only 2 teams of 1 person is needed to start.
     matchEnableForceStart: true
-    matchForceStartTime: 180
+    matchForceStartTime: 60
 
     ## Enable ready block (a block players can click to signify they are ready)
     enablePlayerReadyBlock: false

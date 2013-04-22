@@ -28,10 +28,12 @@ import mc.alk.arena.executors.TeamExecutor;
 import mc.alk.arena.listeners.BAPlayerListener;
 import mc.alk.arena.listeners.BAPluginListener;
 import mc.alk.arena.listeners.BASignListener;
-import mc.alk.arena.listeners.MatchListener;
+import mc.alk.arena.listeners.competition.InArenaListener;
+import mc.alk.arena.listeners.competition.MatchListener;
 import mc.alk.arena.objects.ArenaPlayer;
 import mc.alk.arena.objects.MatchParams;
 import mc.alk.arena.objects.arenas.Arena;
+import mc.alk.arena.objects.victoryconditions.AllKills;
 import mc.alk.arena.objects.victoryconditions.HighestKills;
 import mc.alk.arena.objects.victoryconditions.InfiniteLives;
 import mc.alk.arena.objects.victoryconditions.LastManStanding;
@@ -39,6 +41,7 @@ import mc.alk.arena.objects.victoryconditions.MobKills;
 import mc.alk.arena.objects.victoryconditions.NLives;
 import mc.alk.arena.objects.victoryconditions.NoTeamsLeft;
 import mc.alk.arena.objects.victoryconditions.OneTeamLeft;
+import mc.alk.arena.objects.victoryconditions.PlayerKills;
 import mc.alk.arena.objects.victoryconditions.TimeLimit;
 import mc.alk.arena.objects.victoryconditions.VictoryType;
 import mc.alk.arena.serializers.ArenaControllerSerializer;
@@ -54,9 +57,10 @@ import mc.alk.arena.serializers.TeamHeadSerializer;
 import mc.alk.arena.serializers.YamlFileUpdater;
 import mc.alk.arena.util.FileLogger;
 import mc.alk.arena.util.FileUtil;
+import mc.alk.arena.util.Log;
 import mc.alk.arena.util.MessageUtil;
-import mc.alk.plugin.updater.FileUpdater;
-import mc.alk.plugin.updater.PluginUpdater;
+import mc.alk.plugin.updater.v1r2.FileUpdater;
+import mc.alk.plugin.updater.v1r2.PluginUpdater;
 
 import org.bukkit.Bukkit;
 import org.bukkit.command.ConsoleCommandSender;
@@ -107,11 +111,12 @@ public class BattleArena extends JavaPlugin {
 		FileUpdater.makeIfNotExists(new File(dir+"/competitions"));
 		FileUpdater.makeIfNotExists(new File(dir+"/messages"));
 		FileUpdater.makeIfNotExists(new File(dir+"/saves"));
+		FileUpdater.makeIfNotExists(new File(dir+"/modules"));
 		/// For potential updates to default yml files
 		YamlFileUpdater yfu = new YamlFileUpdater(this);
 
 		/// Set up our messages first before other initialization needs messages
-		MessageSerializer defaultMessages = new MessageSerializer("default");
+		MessageSerializer defaultMessages = new MessageSerializer("default",null);
 		defaultMessages.setConfig(FileUtil.load(clazz,dir.getPath()+"/messages.yml","/default_files/messages.yml"));
 		yfu.updateMessageSerializer(plugin,defaultMessages); /// Update our config if necessary
 		defaultMessages.loadAll();
@@ -140,20 +145,26 @@ public class BattleArena extends JavaPlugin {
 		VictoryType.register(OneTeamLeft.class, this);
 		VictoryType.register(NoTeamsLeft.class, this);
 		VictoryType.register(HighestKills.class, this);
+		VictoryType.register(PlayerKills.class, this);
 		VictoryType.register(MobKills.class, this);
+		VictoryType.register(AllKills.class, this);
 
 		/// Load our configs, then arenas
 		baConfigSerializer.setConfig(FileUtil.load(clazz,dir.getPath() +"/config.yml","/default_files/config.yml"));
 		try{
 			YamlFileUpdater.updateBaseConfig(this,baConfigSerializer); /// Update our config if necessary
 		} catch (Exception e){
-			e.printStackTrace();
+			Log.printStackTrace(e);
 		}
 
 		baConfigSerializer.loadDefaults(); /// Load our defaults for BattleArena, has to happen before classes are loaded
 
 		classesSerializer.setConfig(FileUtil.load(clazz,dir.getPath() +"/classes.yml","/default_files/classes.yml")); /// Load classes
 		classesSerializer.loadAll();
+
+		/// Spawn Groups need to be loaded before the arenas
+		SpawnSerializer ss = new SpawnSerializer();
+		ss.setConfig(FileUtil.load(clazz,dir.getPath() +"/spawns.yml","/default_files/spawns.yml"));
 
 		TeamHeadSerializer ts = new TeamHeadSerializer();
 		ts.setConfig(FileUtil.load(clazz,dir.getPath() +"/teamConfig.yml","/default_files/teamConfig.yml")); /// Load team Colors
@@ -168,8 +179,6 @@ public class BattleArena extends JavaPlugin {
 
 		ArenaSerializer.setBAC(arenaController);
 
-		SpawnSerializer ss = new SpawnSerializer();
-		ss.setConfig(FileUtil.load(clazz,dir.getPath() +"/spawns.yml","/default_files/spawns.yml"));
 		arenaControllerSerializer.load();
 
 		/// Load up our signs
@@ -209,6 +218,7 @@ public class BattleArena extends JavaPlugin {
 		});
 		if (Defaults.AUTO_UPDATE)
 			PluginUpdater.downloadPluginUpdates(this);
+
 		MessageUtil.sendMessage(sender,"&4["+pluginname+"] &6v"+version+"&f enabled!");
 	}
 
@@ -218,7 +228,7 @@ public class BattleArena extends JavaPlugin {
 			f.mkdir();
 		for (MatchParams mp: ParamController.getAllParams()){
 			String fileName = "defaultMessages.yml";
-			MessageSerializer ms = new MessageSerializer(mp.getName());
+			MessageSerializer ms = new MessageSerializer(mp.getName(),null);
 			ms.setConfig(FileUtil.load(this.getClass(),f.getAbsolutePath()+"/"+mp.getName()+"Messages.yml","/default_files/"+fileName));
 			ms.loadAll();
 			MessageSerializer.addMessageSerializer(mp.getName(),ms);
@@ -296,6 +306,8 @@ public class BattleArena extends JavaPlugin {
 	 * Player is in a queue, in a competition, being challenged, inside MobArena,
 	 * being challenged to a duel, being invited to a team
 	 *
+	 * If a player is in an Arena or in a Competition this is always true
+	 *
 	 * @param player: the player you want to check
 	 * @param showReasons: if player is in system, show the player a message about how to exit
 	 * @return true or false: whether they are in the system
@@ -319,17 +331,7 @@ public class BattleArena extends JavaPlugin {
 	 * @return true or false: whether they are in inside an arena
 	 */
 	public static boolean inArena(Player player){
-		return getBAController().insideArena(BattleArena.toArenaPlayer(player));
-	}
-
-	/**
-	 * Use the newer inArena
-	 * @param player
-	 * @return
-	 */
-	@Deprecated
-	public static boolean insideArena(Player player){
-		return getBAController().insideArena(BattleArena.toArenaPlayer(player));
+		return InArenaListener.inArena(player.getName());
 	}
 
 	@Override
@@ -448,5 +450,9 @@ public class BattleArena extends JavaPlugin {
 	 */
 	public static void registerCompetition(JavaPlugin plugin, String name, String cmd, Class<? extends Arena> arenaClass, CustomCommandExecutor executor){
 		new APIRegistrationController().registerCompetition(plugin,name,cmd,arenaClass, executor);
+	}
+
+	public File getModuleDirectory() {
+		return new File(this.getDataFolder()+"/modules");
 	}
 }

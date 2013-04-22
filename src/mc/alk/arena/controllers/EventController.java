@@ -6,7 +6,7 @@ import mc.alk.arena.competition.events.Event;
 import mc.alk.arena.executors.EventExecutor;
 import mc.alk.arena.objects.ArenaPlayer;
 import mc.alk.arena.objects.EventParams;
-import mc.alk.arena.objects.teams.Team;
+import mc.alk.arena.objects.teams.ArenaTeam;
 
 
 public class EventController {
@@ -17,7 +17,7 @@ public class EventController {
 
 	public static Event insideEvent(ArenaPlayer p) {
 		for (Event evt : registeredEvents.values()){
-			Team t = evt.getTeam(p);
+			ArenaTeam t = evt.getTeam(p);
 			if (t != null)
 				return evt;
 		}
@@ -53,5 +53,4 @@ public class EventController {
 	public static boolean isEventType(String name) {
 		return ParamController.getEventParamCopy(name) != null;
 	}
-
 }

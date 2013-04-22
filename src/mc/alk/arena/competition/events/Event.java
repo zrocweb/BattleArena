@@ -16,7 +16,6 @@ import mc.alk.arena.competition.Competition;
 import mc.alk.arena.competition.util.TeamJoinFactory;
 import mc.alk.arena.competition.util.TeamJoinHandler;
 import mc.alk.arena.competition.util.TeamJoinHandler.TeamJoinResult;
-import mc.alk.arena.competition.util.TeamJoinHandler.TeamJoinStatus;
 import mc.alk.arena.controllers.BattleArenaController;
 import mc.alk.arena.controllers.TeamController;
 import mc.alk.arena.controllers.messaging.EventMessageHandler;
@@ -39,7 +38,7 @@ import mc.alk.arena.objects.arenas.ArenaListener;
 import mc.alk.arena.objects.exceptions.NeverWouldJoinException;
 import mc.alk.arena.objects.options.TransitionOptions;
 import mc.alk.arena.objects.queues.TeamQObject;
-import mc.alk.arena.objects.teams.Team;
+import mc.alk.arena.objects.teams.ArenaTeam;
 import mc.alk.arena.objects.tournament.Matchup;
 import mc.alk.arena.objects.tournament.Round;
 import mc.alk.arena.util.Countdown;
@@ -90,7 +89,7 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 		try {
 			openEvent(eventParams);
 		} catch (NeverWouldJoinException e) {
-			e.printStackTrace();
+			Log.printStackTrace(e);
 		}
 	}
 
@@ -120,7 +119,7 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 	public void addAllOnline() {
 		Player[] online = ServerUtil.getOnlinePlayers();
 		for (Player p: online){
-			Team t = TeamController.createTeam(BattleArena.toArenaPlayer(p));
+			ArenaTeam t = TeamController.createTeam(BattleArena.toArenaPlayer(p));
 			TeamQObject tqo = new TeamQObject(t,eventParams,null);
 			this.joining(tqo);
 		}
@@ -135,8 +134,8 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 	}
 
 	public void startEvent() {
-		List<Team> improper = joinHandler.removeImproperTeams();
-		for (Team t: improper){
+		List<ArenaTeam> improper = joinHandler.removeImproperTeams();
+		for (ArenaTeam t: improper){
 			t.sendMessage("&cYour team has been excluded to having an improper team size");
 		}
 		/// TODO rebalance teams
@@ -177,7 +176,7 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 
 	protected void eventCancelled(){
 		stopTimer();
-		List<Team> newTeams = new ArrayList<Team>(teams);
+		List<ArenaTeam> newTeams = new ArrayList<ArenaTeam>(teams);
 		callEvent(new EventCancelEvent(this));
 		mc.sendEventCancelled(newTeams);
 		endEvent();
@@ -201,7 +200,7 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 		return isOpen();
 	}
 
-	public boolean canJoin(Team t){
+	public boolean canJoin(ArenaTeam t){
 		return isOpen();
 	}
 
@@ -225,7 +224,7 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 	 * Called when a player leaves minecraft.. we cant stop them so deal with it
 	 */
 	public boolean leave(ArenaPlayer p) {
-		Team t = getTeam(p);
+		ArenaTeam t = getTeam(p);
 		p.removeCompetition(this);
 		if (t==null) /// they arent in this Event
 			return false;
@@ -234,7 +233,7 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 	}
 
 	public void removeAllTeams(){
-		for (Team t: teams){
+		for (ArenaTeam t: teams){
 			TeamController.removeTeamHandler(t,this);
 			for (ArenaPlayer p: t.getPlayers()){
 				p.removeCompetition(this);
@@ -244,7 +243,7 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 	}
 
 	@Override
-	public boolean removeTeam(Team team){
+	public boolean removeTeam(ArenaTeam team){
 		if (teams.remove(team)){
 			TeamController.removeTeamHandler(team,this);
 			for (ArenaPlayer p: team.getPlayers()){
@@ -257,22 +256,22 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 
 
 	@Override
-	public void addTeam(Team team){
+	public boolean addTeam(ArenaTeam team){
 		if (teams.contains(team)) /// adding a team twice is bad mmkay
-			return;
+			return true;
 		TeamController.addTeamHandler(team, this);
-		new TeamJoinedEvent(this,team).callEvent();
-		teams.add(team);
+		callEvent(new TeamJoinedEvent(this,team));
+		return teams.add(team);
 	}
 
-	public void addTeam(Player p){
-		ArenaPlayer ap = BattleArena.toArenaPlayer(p);
-		Team t = TeamController.getTeam(ap);
-		if (t == null){
-			t = TeamController.createTeam(ap);
-		}
-		addTeam(t);
-	}
+//	public void addTeam(Player p){
+//		ArenaPlayer ap = BattleArena.toArenaPlayer(p);
+//		Team t = TeamController.getTeam(ap);
+//		if (t == null){
+//			t = TeamController.createTeam(ap);
+//		}
+//		addTeam(t);
+//	}
 
 	/**
 	 * Called when a team wants to join
@@ -281,22 +280,22 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 	 */
 	public TeamJoinResult joining(TeamQObject tqo){
 		TeamJoinResult tjr = null;
-		Team team = tqo.getTeam();
+		ArenaTeam team = tqo.getTeam();
 		if (joinHandler == null)
 			tjr = TeamJoinHandler.NOTOPEN;
 		else
 			tjr = joinHandler.joiningTeam(tqo);
-		if (tjr.status != TeamJoinStatus.CANT_FIT){
-//			mc.sendEventTeamJoiningMessage(tqo.getTeam()); /// TODO
-		}
 		switch(tjr.status){
 		case WAITING_FOR_PLAYERS:
 			mc.sendWaitingForMorePlayers(team, tjr.remaining);
-			/* drop down into ADDED, to add the players competition */
+			for (ArenaPlayer player: tqo.getTeam().getPlayers()){
+				player.addCompetition(this);}
+			break;
 		case ADDED_TO_EXISTING: /* drop down into added */
 		case ADDED:
 			for (ArenaPlayer player: tqo.getTeam().getPlayers()){
 				player.addCompetition(this);}
+			mc.sendTeamJoined(tqo.getTeam());
 			break;
 		case CANT_FIT:
 			mc.sendCantFitTeam(team);
@@ -328,7 +327,7 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 
 	public int getNTeams() {
 		int size = 0;
-		for (Team t: teams){
+		for (ArenaTeam t: teams){
 			if (t.size() > 0)
 				size++;
 		}
@@ -356,8 +355,8 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 	}
 
 
-	public static class TeamSizeComparator implements Comparator<Team>{
-		public int compare(Team arg0, Team arg1) {
+	public static class TeamSizeComparator implements Comparator<ArenaTeam>{
+		public int compare(ArenaTeam arg0, ArenaTeam arg1) {
 			if (arg0.size() == arg1.size() ) return 0;
 			return (arg0.size() < arg1.size()) ? -1 : 1;
 		}
@@ -411,7 +410,7 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 				if (useMatchups) sb.append("&4Matchup :");
 				MatchResult result = m.getResult();
 				if (result == null || result.getVictors() == null){
-					for (Team t: m.getTeams()){
+					for (ArenaTeam t: m.getTeams()){
 						sb.append(t.getTeamSummary()+" "); }
 					sb.append("\n");
 				} else {
@@ -427,7 +426,7 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 	/**
 	 * Broadcast to all players in the Event
 	 */
-	public void broadcast(String msg){for (Team t : teams){t.sendMessage(msg);}}
+	public void broadcast(String msg){for (ArenaTeam t : teams){t.sendMessage(msg);}}
 
 	public Long getTimeTillStart() {
 		if (timer == null)
@@ -459,7 +458,7 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 	@Override
 	public Set<ArenaPlayer> getPlayers() {
 		Set<ArenaPlayer> players = new HashSet<ArenaPlayer>();
-		for (Team t: getTeams()){
+		for (ArenaTeam t: getTeams()){
 			players.addAll(t.getPlayers());}
 		if (isOpen() && joinHandler != null){
 			players.addAll(joinHandler.getExcludedPlayers());
@@ -489,16 +488,16 @@ public abstract class Event extends Competition implements CountdownCallback, Ar
 	}
 
 	@Override
-	public void addedToTeam(Team team, Collection<ArenaPlayer> players) {/* do nothing */}
+	public void addedToTeam(ArenaTeam team, Collection<ArenaPlayer> players) {/* do nothing */}
 
 	@Override
-	public void addedToTeam(Team team, ArenaPlayer player) {/* do nothing */}
+	public boolean addedToTeam(ArenaTeam team, ArenaPlayer player) {return true;/* do nothing */}
 
 	@Override
-	public void removedFromTeam(Team team, Collection<ArenaPlayer> players) {/* do nothing */}
+	public void removedFromTeam(ArenaTeam team, Collection<ArenaPlayer> players) {/* do nothing */}
 
 	@Override
-	public void removedFromTeam(Team team, ArenaPlayer player) {/* do nothing */}
+	public void removedFromTeam(ArenaTeam team, ArenaPlayer player) {/* do nothing */}
 
 	@Override
 	public int getID(){

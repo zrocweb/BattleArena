@@ -14,8 +14,8 @@ import mc.alk.arena.controllers.ArenaClassController;
 import mc.alk.arena.controllers.MethodController;
 import mc.alk.arena.controllers.ParamController;
 import mc.alk.arena.controllers.TeleportController;
-import mc.alk.arena.listeners.BukkitEventListener;
-import mc.alk.arena.listeners.RListener;
+import mc.alk.arena.listeners.custom.BukkitEventHandler;
+import mc.alk.arena.listeners.custom.RListener;
 import mc.alk.arena.objects.ArenaClass;
 import mc.alk.arena.objects.ArenaPlayer;
 import mc.alk.arena.objects.MatchParams;
@@ -24,11 +24,12 @@ import mc.alk.arena.objects.arenas.Arena;
 import mc.alk.arena.objects.arenas.ArenaType;
 import mc.alk.arena.objects.events.EventPriority;
 import mc.alk.arena.objects.queues.QueueObject;
-import mc.alk.arena.objects.teams.Team;
+import mc.alk.arena.objects.teams.ArenaTeam;
 import mc.alk.arena.serializers.InventorySerializer;
 import mc.alk.arena.util.ExpUtil;
 import mc.alk.arena.util.InventoryUtil;
 import mc.alk.arena.util.InventoryUtil.PInv;
+import mc.alk.arena.util.Log;
 import mc.alk.arena.util.MapOfTreeSet;
 import mc.alk.arena.util.MessageUtil;
 import mc.alk.arena.util.NotifierUtil;
@@ -48,11 +49,11 @@ import org.bukkit.inventory.ItemStack;
 
 public class BattleArenaDebugExecutor extends CustomCommandExecutor{
 
-	@MCCommand( cmds = {"enableDebugging"}, admin=true,min=3, usage="enableDebugging <code section> <true | false>")
+	@MCCommand( cmds = {"enableDebugging","ed"}, admin=true,usage="enableDebugging <code section> <true | false>")
 	public void enableDebugging(CommandSender sender, String section, Boolean on){
 		if (section.equalsIgnoreCase("transitions")){
 			Defaults.DEBUG_TRANSITIONS = on;
-		} else if(section.equalsIgnoreCase("virtualplayer")){
+		} else if(section.equalsIgnoreCase("virtualplayer") || section.equalsIgnoreCase("vp")){
 			Defaults.DEBUG_VIRTUAL = on;
 		} else if(section.equalsIgnoreCase("tracking")){
 			Defaults.DEBUG_TRACKING = on;
@@ -106,15 +107,15 @@ public class BattleArenaDebugExecutor extends CustomCommandExecutor{
 	public boolean showListeners(CommandSender sender, String args[]) {
 		String limitToPlayer = args.length > 1 ? args[1] : null;
 
-		EnumMap<org.bukkit.event.EventPriority, HashMap<Type, BukkitEventListener>> gels = MethodController.getEventListeners();
+		EnumMap<org.bukkit.event.EventPriority, HashMap<Type, BukkitEventHandler>> gels = MethodController.getEventListeners();
 		for (org.bukkit.event.EventPriority bp: gels.keySet()){
 			sendMessage(sender, "&4#### &f----!! Bukkit Priority=&5"+bp+"&f !!---- &4####");
-			HashMap<Type, BukkitEventListener> types = gels.get(bp);
-			for (BukkitEventListener bel: types.values()){
-				MapOfTreeSet<String,RListener> lists2 = bel.getListeners();
-				String str = MessageUtil.joinBukkitPlayers(bel.getPlayers(),", ");
+			HashMap<Type, BukkitEventHandler> types = gels.get(bp);
+			for (BukkitEventHandler bel: types.values()){
+				MapOfTreeSet<String,RListener> lists2 = bel.getSpecificPlayerListener().getListeners();
+				String str = MessageUtil.joinBukkitPlayers(bel.getSpecificPlayerListener().getPlayers(),", ");
 				String has = bel.hasListeners() ? "&2true" : "&cfalse";
-				sendMessage(sender, "---- Event &e" + bel.getEvent().getSimpleName() +"&f:"+has+"&f, players="+str);
+				sendMessage(sender, "---- Event &e" + bel.getSpecificPlayerListener().getEvent().getSimpleName() +"&f:"+has+"&f, players="+str);
 				for (String p : lists2.keySet()){
 					if (limitToPlayer != null && !p.equalsIgnoreCase(limitToPlayer))
 						continue;
@@ -123,7 +124,7 @@ public class BattleArenaDebugExecutor extends CustomCommandExecutor{
 						sendMessage(sender, "!!! "+rl.getPriority() +"  " + p +"  Listener  " + rl.getListener().getClass().getSimpleName());
 					}
 				}
-				EnumMap<EventPriority, List<RListener>> lists = bel.getMatchListeners();
+				EnumMap<EventPriority, List<RListener>> lists = bel.getMatchListener().getListeners();
 				for (EventPriority ep: lists.keySet()){
 					for (RListener rl : lists.get(ep)){
 						sendMessage(sender, "!!! " + ep  + "  -  " + rl);
@@ -140,7 +141,7 @@ public class BattleArenaDebugExecutor extends CustomCommandExecutor{
 		if (am == null){
 			return sendMessage(sender,"&ePlayer " + pl.getName() +" is not in a match");}
 //		am.addKill(pl);
-		Team t = am.getTeam(pl);
+		ArenaTeam t = am.getTeam(pl);
 		if (t != null){
 			t.addKill(pl);
 		}
@@ -239,9 +240,41 @@ public class BattleArenaDebugExecutor extends CustomCommandExecutor{
 		return true;
 	}
 
-	@MCCommand(cmds={"verify"}, admin=true,usage="verify")
+	@MCCommand(cmds={"showClass"}, op=true)
+	public boolean showClass(CommandSender sender, String stringClass) {
+		final Class<?> clazz;
+		try {
+			clazz = Class.forName(stringClass);
+		} catch (ClassNotFoundException e) {
+			return sendMessage(sender, "&cClass " + stringClass +" not found");
+		}
+		ReflectionToStringBuilder rtsb = new ReflectionToStringBuilder(clazz, ToStringStyle.MULTI_LINE_STYLE);
+		return sendMessage(sender, rtsb.toString());
+	}
+
+	@MCCommand(cmds={"showAMQ"}, op=true)
+	public boolean showAMQ(CommandSender sender) {
+		ReflectionToStringBuilder rtsb = new ReflectionToStringBuilder(BattleArena.getBAController().getArenaMatchQueue(), ToStringStyle.MULTI_LINE_STYLE);
+		return sendMessage(sender, rtsb.toString());
+	}
+
+	@MCCommand(cmds={"showBAC"}, op=true)
+	public boolean showBAC(CommandSender sender) {
+		ReflectionToStringBuilder rtsb = new ReflectionToStringBuilder(BattleArena.getBAController(), ToStringStyle.MULTI_LINE_STYLE);
+		return sendMessage(sender, rtsb.toString());
+	}
+
+	@MCCommand(cmds={"verify"}, admin=true)
 	public boolean arenaVerify(CommandSender sender) {
-		String[] lines = ac.toDetailedString().split("\n");
+		String[] lines = ac.toStringQueuesAndMatches().split("\n");
+		for (String line : lines){
+			sendMessage(sender,line);}
+		return true;
+	}
+
+	@MCCommand(cmds={"showAllArenas"}, admin=true)
+	public boolean arenaShowAllArenas(CommandSender sender) {
+		String[] lines = ac.toStringArenas().split("\n");
 		for (String line : lines){
 			sendMessage(sender,line);}
 		return true;
@@ -261,12 +294,12 @@ public class BattleArenaDebugExecutor extends CustomCommandExecutor{
 	@MCCommand(cmds={"purgeQueue"}, admin=true)
 	public boolean arenaPurgeQueue(CommandSender sender) {
 		try {
-			Collection<Team> teams = ac.purgeQueue();
-			for (Team t: teams){
+			Collection<ArenaTeam> teams = ac.purgeQueue();
+			for (ArenaTeam t: teams){
 				t.sendMessage("&eYou have been &cremoved&e from the queue by an administrator");
 			}
 		} catch (Exception e){
-			e.printStackTrace();
+			Log.printStackTrace(e);
 			sendMessage(sender,"&4error purging queue");
 			return true;
 		}

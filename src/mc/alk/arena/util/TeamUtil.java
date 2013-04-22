@@ -6,7 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 
 import mc.alk.arena.objects.ArenaPlayer;
-import mc.alk.arena.objects.teams.Team;
+import mc.alk.arena.objects.teams.ArenaTeam;
 import mc.alk.arena.objects.teams.TeamAppearance;
 
 import org.bukkit.ChatColor;
@@ -28,7 +28,7 @@ public class TeamUtil {
 		}
 	}
 
-	public static void setTeamHead(final int color, Team team) {
+	public static void setTeamHead(final int color, ArenaTeam team) {
 		for (ArenaPlayer p: team.getPlayers()){
 			setTeamHead(color,p);
 		}
@@ -46,22 +46,26 @@ public class TeamUtil {
 		return index != null && index < teamHeads.size() ? teamHeads.get(index).getColor() : Color.WHITE;
 	}
 
-	@SuppressWarnings("deprecation")
 	public static void setTeamHead(final int index, ArenaPlayer player) {
-		Player p = player.getPlayer();
+		setTeamHead(getTeamHead(index),player);
+	}
+
+	public static void setTeamHead(final ItemStack item, ArenaPlayer player) {
+		setTeamHead(item,player.getPlayer());
+	}
+
+	@SuppressWarnings("deprecation")
+	public static void setTeamHead(ItemStack item, Player p) {
 		if (p.isOnline() && !p.isDead()){
 			ItemStack is = p.getInventory().getHelmet();
-			ItemStack item = getTeamHead(index);
 			p.getInventory().setHelmet(item);
 			if (is != null && is.getType() != Material.AIR && is.getType()!= Material.WOOL){
 				InventoryUtil.addItemToInventory(p, is.clone(), is.getAmount(), false);}
-
 			try{
 				p.updateInventory();
 			}catch (Exception e){}
 		}
 	}
-
 	public static String createTeamName(int index) {
 		return index < teamHeads.size() ? teamHeads.get(index).getName() : "Team" + index;
 	}
@@ -75,7 +79,7 @@ public class TeamUtil {
 		map.put(name.toUpperCase(), teamHeads.size()-1);
 	}
 
-	public static String formatName(Team t){
+	public static String formatName(ArenaTeam t){
 		StringBuilder sb = new StringBuilder("&e " + t.getDisplayName());
 
 		for (ArenaPlayer p: t.getPlayers()){
@@ -87,4 +91,5 @@ public class TeamUtil {
 		}
 		return sb.toString();
 	}
+
 }

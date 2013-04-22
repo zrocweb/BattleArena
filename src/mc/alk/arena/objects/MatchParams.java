@@ -1,7 +1,12 @@
 package mc.alk.arena.objects;
 
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
+
 import mc.alk.arena.objects.arenas.ArenaType;
 import mc.alk.arena.objects.messaging.AnnouncementOptions;
+import mc.alk.arena.objects.modules.ArenaModule;
 import mc.alk.arena.objects.victoryconditions.VictoryType;
 import mc.alk.arena.util.MessageUtil;
 
@@ -18,7 +23,7 @@ public class MatchParams extends ArenaParams implements Comparable<MatchParams>{
 	Integer nDeaths = 1;
 	boolean overrideDefaultBattleTracker = true;
 	int numConcurrentCompetitions = Integer.MAX_VALUE;
-	boolean duelOnly = false;
+	Set<ArenaModule> modules = new HashSet<ArenaModule>();
 
 	public MatchParams(ArenaType at, Rating rating, VictoryType vc) {
 		super(at);
@@ -26,16 +31,16 @@ public class MatchParams extends ArenaParams implements Comparable<MatchParams>{
 		this.vc = vc;
 	}
 
-	public MatchParams(MatchParams q) {
-		super(q);
-		this.prefix = q.prefix;
-		this.vc = q.vc;
-		this.matchTime = q.matchTime;
-		this.intervalTime = q.intervalTime;
-		this.ao = q.ao;
-		this.nDeaths = q.nDeaths;
-		this.numConcurrentCompetitions = q.numConcurrentCompetitions;
-		this.duelOnly = q.duelOnly;
+	public MatchParams(MatchParams mp) {
+		super(mp);
+		this.prefix = mp.prefix;
+		this.vc = mp.vc;
+		this.matchTime = mp.matchTime;
+		this.intervalTime = mp.intervalTime;
+		this.ao = mp.ao;
+		this.nDeaths = mp.nDeaths;
+		this.numConcurrentCompetitions = mp.numConcurrentCompetitions;
+		this.modules = new HashSet<ArenaModule>(mp.modules);
 	}
 
 	public VictoryType getVictoryType() {return vc;}
@@ -72,12 +77,15 @@ public class MatchParams extends ArenaParams implements Comparable<MatchParams>{
 	public void setIntervalTime(Integer intervalTime) {
 		this.intervalTime = intervalTime;
 	}
+
 	public void setNLives(Integer ndeaths){
 		this.nDeaths = ndeaths;
 	}
+
 	public Integer getNLives(){
 		return nDeaths;
 	}
+
 	@Override
 	public int hashCode() {
 		return ((arenaType.ordinal()) << 27) +(rating.ordinal() << 25) + (minTeams<<12)+(vc.ordinal() << 8) + minTeamSize;
@@ -126,11 +134,10 @@ public class MatchParams extends ArenaParams implements Comparable<MatchParams>{
 		return JoinType.QUEUE;
 	}
 
-	public boolean isDuelOnly() {
-		return duelOnly;
+	public void addModule(ArenaModule am) {
+		modules.add(am);
 	}
-
-	public void setDuelOnly(boolean bool) {
-		this.duelOnly = bool;
+	public Collection<ArenaModule> getModules(){
+		return modules;
 	}
 }
