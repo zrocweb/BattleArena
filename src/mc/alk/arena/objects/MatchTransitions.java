@@ -9,9 +9,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import mc.alk.arena.objects.exceptions.InvalidOptionException;
 import mc.alk.arena.objects.options.TransitionOption;
 import mc.alk.arena.objects.options.TransitionOptions;
-import mc.alk.arena.objects.teams.Team;
+import mc.alk.arena.objects.teams.ArenaTeam;
 import mc.alk.arena.util.InventoryUtil;
 
 import org.bukkit.World;
@@ -29,11 +30,25 @@ public class MatchTransitions {
 		calculateAllOptions();
 	}
 
+	public Map<MatchState,TransitionOptions> getAllOptions(){
+		return ops;
+	}
+
 	public void addTransitionOptions(MatchState ms, TransitionOptions tops) {
 		ops.put(ms, tops);
 		Map<TransitionOption,Object> ops = tops.getOptions();
 		if (ops != null)
 			allops.addAll(ops.keySet());
+	}
+
+	public void addTransitionOption(MatchState state, TransitionOption option) throws InvalidOptionException {
+		allops.add(option);
+		TransitionOptions tops = ops.get(state);
+		if (tops == null){
+			tops = new TransitionOptions();
+			ops.put(state, tops);
+		}
+		tops.addOption(option);
 	}
 
 	public void removeTransitionOptions(MatchState ms) {
@@ -106,7 +121,7 @@ public class MatchTransitions {
 		return ops.containsKey(MatchState.PREREQS) ? ops.get(MatchState.PREREQS).playerReady(p,w): true;
 	}
 
-	public boolean teamReady(Team t, World w) {
+	public boolean teamReady(ArenaTeam t, World w) {
 		TransitionOptions to = ops.get(MatchState.PREREQS);
 		if (to == null)
 			return true;
@@ -116,13 +131,13 @@ public class MatchTransitions {
 		}
 		return true;
 	}
-	public List<MatchState> getMatchStateRange(TransitionOption option, TransitionOption endOption) {
+	public List<MatchState> getMatchStateRange(TransitionOption startOption, TransitionOption endOption) {
 		boolean foundOption = false;
 		List<MatchState> list = new ArrayList<MatchState>();
 		for (MatchState ms : MatchState.values()){
 			TransitionOptions to = ops.get(ms);
 			if (to == null) continue;
-			if (to.hasOption(option)){
+			if (to.hasOption(startOption)){
 				foundOption = true;}
 			if (to.hasOption(endOption))
 				return list;

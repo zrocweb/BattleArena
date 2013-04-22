@@ -1,6 +1,11 @@
 package mc.alk.arena.objects.options;
 
 public enum TransitionOption{
+	/// Default only Options
+	DUELONLY ("duelOnly", false),					/// DEFAULTS only: this game type is duel only
+	ALWAYSOPEN("alwaysOpen", false),				/// DEFAULTS only: this game is always open to joins
+	INDIVIDUALWINS("individualWins", false),		/// DEFAULTS only: discrete wins and losses per team
+
 	/// preReq only Options
 	NEEDARMOR ("needArmor",false),					/// PREREQ only: player needs armor to join the match
 	NOINVENTORY("noInventory",false),				/// PREREQ only: player needs to have no inventory to join
@@ -33,15 +38,14 @@ public enum TransitionOption{
 	ALWAYSWOOLTEAMS("alwaysWoolTeams", false),		/// Always use team Heads (found in teamColors.yml)
 	ALWAYSTEAMNAMES("alwaysTeamNames", false),		/// Always use team Names (found in teamColors.yml)
 
+
 	/// Teleport Options
 	TELEPORTWAITROOM("teleportWaitRoom",false), 	/// Teleport players to the waitroom
+	TELEPORTLOBBY("teleportLobby",false), 			/// Teleport players to the lobby
+	TELEPORTCOURTYARD("teleportCourtyard",false), 	/// Teleport players to the courtyard
 	TELEPORTIN ("teleportIn",false),  				/// Teleport players into the arena
 	TELEPORTOUT("teleportOut",false),				/// Teleport players out of the arena, back to their old location
 	TELEPORTTO("teleportTo", true), 				/// =<location> : Teleport players to the given
-	TELEPORTONARENAEXIT("teleportOnArenaExit",true),/// deprecated
-	TELEPORTWINNER("teleportWinner",true),			/// deprecated
-	TELEPORTLOSER("teleportLoser", true),			/// deprecated
-	TELEPORTBACK("teleportBack",false),				/// depcrecated
 	NOTELEPORT("noTeleport", false), 				/// Prevent players from teleporting
 	NOWORLDCHANGE("noWorldChange",false),			/// Prevent players from changing world
 
@@ -73,6 +77,7 @@ public enum TransitionOption{
 	UNDISGUISE("undisguise",false),					/// Undisguise all players in the arena (needs DisguiseCraft)
 	ENCHANTS("enchants",false),						/// Give the Enchants found in enchants:
 	DEENCHANT("deEnchant",false),					/// DeEnchant all positive and negative effects from the player
+	CLASSENCHANTS("classEnchants",false),			/// regive the enchants from the class they have chosen
 	ADDPERMS("addPerms", false),					/// NOT IMPLEMENTED
 	REMOVEPERMS("removePerms", false),				/// NOT IMPLEMENTED
 	GAMEMODE("gameMode",true),						/// =<GameMode> : sets the given gamemode of the player

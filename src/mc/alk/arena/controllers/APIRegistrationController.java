@@ -31,7 +31,7 @@ import mc.alk.arena.serializers.ConfigSerializer;
 import mc.alk.arena.serializers.MessageSerializer;
 import mc.alk.arena.util.FileUtil;
 import mc.alk.arena.util.Log;
-import mc.alk.plugin.updater.FileUpdater;
+import mc.alk.plugin.updater.v1r2.FileUpdater;
 
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandExecutor;
@@ -125,7 +125,7 @@ public class APIRegistrationController {
 		return true;
 	}
 
-	private void setCommandToExecutor(JavaPlugin plugin, String wantedCommand, CommandExecutor executor) {
+	private static void setCommandToExecutor(JavaPlugin plugin, String wantedCommand, CommandExecutor executor) {
 		if (!setCommandToExecutor(plugin,wantedCommand, executor, false)){
 			List<String> aliases = new ArrayList<String>();
 			ArenaCommand arenaCommand = new ArenaCommand(wantedCommand,"","", aliases, BattleArena.getSelf(),executor);
@@ -133,7 +133,7 @@ public class APIRegistrationController {
 		}
 	}
 
-	private boolean setCommandToExecutor(JavaPlugin plugin, String command, CommandExecutor executor, boolean displayError){
+	private static boolean setCommandToExecutor(JavaPlugin plugin, String command, CommandExecutor executor, boolean displayError){
 		try{
 			plugin.getCommand(command).setExecutor(executor);
 			return true;
@@ -201,14 +201,6 @@ public class APIRegistrationController {
 					new DelayedRegistrationHandler(plugin, compDir,defaultArenaFile));
 		}
 
-		/// load messages
-		if (loadFile(plugin, messageFile, name+"Messages.yml",name,cmd)){
-			MessageSerializer ms = new MessageSerializer(name);
-			ms.setConfig(messageFile);
-			ms.loadAll();
-			MessageSerializer.addMessageSerializer(name,ms);
-		}
-
 		/// load config
 		if (!loadFile(plugin, defaultFile, defaultPluginConfigFile, pluginFile,
 				name+"Config.yml",name,cmd)){
@@ -233,10 +225,52 @@ public class APIRegistrationController {
 		} else {
 			at = ArenaType.register(name, arenaClass, plugin);
 		}
+
 		/// Load our Match Params for this type
-		MatchParams mp = config.loadType();
+		MatchParams mp = config.loadMatchParams();
+
+		ArenaType gameType = ConfigSerializer.getArenaGameType(plugin,config.getConfigurationSection(name));
+		MessageSerializer ms = null;
+		/// load messages
+		if (loadFile(plugin, messageFile, name+"Messages.yml",name,cmd)){
+			ms = new MessageSerializer(name,mp);
+		} else if (gameType != null){
+			RegisteredCompetition rc = CompetitionController.getCompetition(plugin, gameType.getName());
+			if (rc != null){
+				ms = MessageSerializer.getMessageSerializer(gameType.getName());}
+		}
+
+		if (ms != null){
+			ms.setConfig(messageFile);
+			ms.loadAll();
+			MessageSerializer.addMessageSerializer(name,ms);
+		}
+
+		/// Everything nearly successful, register our competition
+		RegisteredCompetition rc = new RegisteredCompetition(plugin,name);
+
+		if (executor == null && gameType != null){
+			RegisteredCompetition comp = CompetitionController.getCompetition(plugin, gameType.getName());
+			if (comp != null){
+				executor = comp.getCustomExecutor();}
+		} else {
+			rc.setCustomExeuctor(executor);
+		}
 
 		/// Create our Executor
+		createExecutor(plugin, cmd, executor, mp);
+
+		rc.setConfigSerializer(config);
+		CompetitionController.addRegisteredCompetition(rc);
+
+		/// Load our arenas
+		ArenaSerializer as = new ArenaSerializer(plugin, defaultArenaFile); /// arena config
+		as.loadArenas(plugin,at);
+		rc.setArenaSerializer(as);
+		return true;
+	}
+
+	private static void createExecutor(JavaPlugin plugin, String cmd, CustomCommandExecutor executor, MatchParams mp) {
 		CustomCommandExecutor exe = null;
 		if (mp instanceof EventParams){
 			exe = new ReservedArenaEventExecutor();
@@ -255,16 +289,5 @@ public class APIRegistrationController {
 		setCommandToExecutor(plugin, cmd.toLowerCase(), exe);
 		if (!mp.getCommand().equalsIgnoreCase(cmd))
 			setCommandToExecutor(plugin, mp.getCommand().toLowerCase(), exe);
-
-		/// Everything successful, register our competition
-		RegisteredCompetition rc = new RegisteredCompetition(plugin,name);
-		rc.setConfigSerializer(config);
-		CompetitionController.addRegisteredCompetition(rc);
-
-		/// Load our arenas
-		ArenaSerializer as = new ArenaSerializer(plugin, defaultArenaFile); /// arena config
-		as.loadArenas(plugin,at);
-		rc.setArenaSerializer(as);
-		return true;
 	}
 }

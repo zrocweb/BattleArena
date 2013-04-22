@@ -24,7 +24,8 @@ import mc.alk.arena.objects.options.EventOpenOptions;
 import mc.alk.arena.objects.options.EventOpenOptions.EventOpenOption;
 import mc.alk.arena.objects.options.JoinOptions;
 import mc.alk.arena.objects.queues.TeamQObject;
-import mc.alk.arena.objects.teams.Team;
+import mc.alk.arena.objects.teams.ArenaTeam;
+import mc.alk.arena.util.Log;
 import mc.alk.arena.util.MessageUtil;
 import mc.alk.arena.util.PermissionsUtil;
 import mc.alk.arena.util.TimeUtil;
@@ -118,7 +119,7 @@ public class EventExecutor extends BAExecutor{
 			return sendMessage(sender,"&2You have started the &6" + name);
 		} catch (Exception e) {
 			sendMessage(sender,"&cError Starting the &6" + name);
-			e.printStackTrace();
+			Log.printStackTrace(e);
 			return sendMessage(sender,"&c" +e.getMessage());
 		}
 	}
@@ -144,16 +145,16 @@ public class EventExecutor extends BAExecutor{
 		return sendMessage(sender,sb.toString());
 	}
 
-	@MCCommand(cmds={"leave"}, usage="leave", order=2)
-	public boolean eventLeave(ArenaPlayer p) {
-		Event event = controller.getEvent(p);
-		if (event == null){
-			return sendMessage(p,"&eYou aren't inside an event!");}
-		if (!event.waitingToJoin(p) && !event.hasPlayer(p)){
-			return sendMessage(p,"&eYou aren't inside the &6" + event.getName());}
-		event.leave(p);
-		return sendMessage(p,"&eYou have left the &6" + event.getName());
-	}
+//	@MCCommand(cmds={"leave"}, usage="leave", order=2)
+//	public boolean eventLeave(ArenaPlayer p) {
+//		Event event = controller.getEvent(p);
+//		if (event == null){
+//			return sendMessage(p,"&eYou aren't inside an event!");}
+//		if (!event.waitingToJoin(p) && !event.hasPlayer(p)){
+//			return sendMessage(p,"&eYou aren't inside the &6" + event.getName());}
+//		event.leave(p);
+//		return sendMessage(p,"&eYou have left the &6" + event.getName());
+//	}
 
 	@MCCommand(cmds={"check"},usage="check", order=2)
 	public boolean eventCheck(CommandSender sender, EventParams eventParams) {
@@ -233,7 +234,7 @@ public class EventExecutor extends BAExecutor{
 			return false;
 		}
 		/// Get the team
-		Team t = teamc.getSelfFormedTeam(p);
+		ArenaTeam t = teamc.getSelfFormedTeam(p);
 		if (t==null){
 			t = TeamController.createTeam(p); }
 		/// Get or Make a team for the Player
@@ -250,7 +251,7 @@ public class EventExecutor extends BAExecutor{
 		} catch (InvalidOptionException e) {
 			return sendMessage(p, e.getMessage());
 		} catch (Exception e){
-			e.printStackTrace();
+			Log.printStackTrace(e);
 			jp = null;
 		}
 		if (sq.getMaxTeamSize() < t.size()){
@@ -268,7 +269,7 @@ public class EventExecutor extends BAExecutor{
 
 		/// Finally actually join the event
 		event.joining(tqo);
-		sendSystemMessage(t, "you_joined_event", event.getDisplayName());
+//		sendSystemMessage(t, "you_joined_event", event.getDisplayName());
 		if (sq.getSecondsTillStart() != null){
 			Long time = event.getTimeTillStart();
 			if (time != null)
@@ -296,7 +297,7 @@ public class EventExecutor extends BAExecutor{
 
 	private boolean eventTeams(CommandSender sender, Event event) {
 		StringBuilder sb = new StringBuilder();
-		for (Team t: event.getTeams()){
+		for (ArenaTeam t: event.getTeams()){
 			sb.append("\n" + t.getTeamInfo(null)); }
 
 		return sendMessage(sender,sb.toString());
@@ -330,7 +331,7 @@ public class EventExecutor extends BAExecutor{
 				Match match = rae.getMatch();
 				inside = match.getInsidePlayers();
 			}
-			for (Team t: event.getTeams()){
+			for (ArenaTeam t: event.getTeams()){
 				sb.append("\n" + t.getTeamInfo(inside));
 			}
 		}

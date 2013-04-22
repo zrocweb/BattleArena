@@ -22,7 +22,7 @@ import mc.alk.arena.objects.MatchState;
 import mc.alk.arena.objects.options.TransitionOption;
 import mc.alk.arena.objects.options.TransitionOptions;
 import mc.alk.arena.objects.regions.WorldGuardRegion;
-import mc.alk.arena.objects.teams.Team;
+import mc.alk.arena.objects.teams.ArenaTeam;
 import mc.alk.arena.util.DisguiseInterface;
 import mc.alk.arena.util.EffectUtil;
 import mc.alk.arena.util.ExpUtil;
@@ -53,21 +53,21 @@ public class PerformTransition {
 	 * @param teams: which teams to affect
 	 * @param onlyInMatch: only perform the actions on people still in the arena match
 	 */
-	public static void transition(Match am, MatchState transition, Collection<Team> teams, boolean onlyInMatch){
+	public static void transition(Match am, MatchState transition, Collection<ArenaTeam> teams, boolean onlyInMatch){
 		if (teams == null)
 			return;
 		boolean first = true;
-		for (Team team: teams){
+		for (ArenaTeam team: teams){
 			transition(am,transition,team,onlyInMatch,first);
 			first = false;
 		}
 	}
 
-	public static boolean transition(Match am, final MatchState transition, Team team, boolean onlyInMatch) {
+	public static boolean transition(Match am, final MatchState transition, ArenaTeam team, boolean onlyInMatch) {
 		return transition(am,transition,team,onlyInMatch,true);
 	}
 
-	static boolean transition(Match am, final MatchState transition, Team team, boolean onlyInMatch,
+	static boolean transition(Match am, final MatchState transition, ArenaTeam team, boolean onlyInMatch,
 			boolean performOncePerTransitionOptions) {
 		final TransitionOptions mo = am.tops.getOptions(transition);
 		//		System.out.println("doing effects for " + transition + "  " + team.getName() + "  " + mo );
@@ -97,7 +97,7 @@ public class PerformTransition {
 	}
 
 	static boolean transition(final Match am, final MatchState transition, final ArenaPlayer player,
-			final Team team, final boolean onlyInMatch) {
+			final ArenaTeam team, final boolean onlyInMatch) {
 		if (Defaults.DEBUG_TRANSITIONS) System.out.println("transition "+am.arena.getName()+"  " + transition + " p= " +player.getName() +
 				" ops="+am.tops.getOptions(transition) +"  inArena="+am.insideArena(player) +"  left="+am.playerLeft(player));
 		if (am.playerLeft(player)) /// The player has purposefully left the match, we have nothing to do with them anymore
@@ -108,9 +108,11 @@ public class PerformTransition {
 			return true;}
 		final boolean teleportIn = mo.shouldTeleportIn();
 		final boolean teleportWaitRoom = mo.shouldTeleportWaitRoom();
+		final boolean teleportLobby = mo.shouldTeleportLobby();
 		final boolean insideArena = am.insideArena(player);
 		/// If the flag onlyInMatch is set, we should leave if the player isnt inside.  disregard if we are teleporting people in
-		if (onlyInMatch && !insideArena && !(teleportIn || teleportWaitRoom)){
+		if (onlyInMatch && !insideArena &&
+				!(teleportIn || teleportWaitRoom || teleportLobby)){
 			return true;}
 		final boolean teleportOut = mo.shouldTeleportOut();
 		final boolean wipeInventory = mo.clearInventory();
@@ -127,7 +129,28 @@ public class PerformTransition {
 		boolean playerReady = player.isOnline();
 		final boolean dead = !player.isOnline() || player.isDead();
 		final Player p = player.getPlayer();
-		if (teleportWaitRoom){ /// Teleport waiting room
+		if (teleportWaitRoom || teleportLobby){ /// Teleport waiting room
+			if ( (insideArena || am.checkReady(player, team, mo, true)) && !dead){
+				/// EnterWaitRoom is supposed to happen before the teleport in event, but it depends on the result of a teleport
+				/// Since we cant really tell the eventual result.. do our best guess
+				Location l;
+				if (teleportWaitRoom){
+					am.enterWaitRoom(player);
+					l = jitter(
+							am.getWaitRoomSpawn(teamIndex,am.spawnsRandom),
+							rand.nextInt(team.size()));
+				} else {
+					am.enterLobby(player);
+					l = jitter(
+							am.getLobbySpawn(teamIndex,am.spawnsRandom),
+							rand.nextInt(team.size()));
+				}
+				TeleportController.teleportPlayer(p, l, false, true);
+				PlayerStoreController.setGameMode(p, GameMode.SURVIVAL);
+			} else {
+				playerReady = false;
+			}
+		} else if (teleportLobby){ /// Teleport lobby
 			if ( (insideArena || am.checkReady(player, team, mo, true)) && !dead){
 				/// EnterWaitRoom is supposed to happen before the teleport in event, but it depends on the result of a teleport
 				/// Since we cant really tell the eventual result.. do our best guess
@@ -141,6 +164,7 @@ public class PerformTransition {
 				playerReady = false;
 			}
 		}
+
 
 		/// Teleport In
 		if (teleportIn && transition != MatchState.ONSPAWN){ /// only tpin, respawn tps happen elsewhere
@@ -191,6 +215,7 @@ public class PerformTransition {
 				final ArenaClass ac = getArenaClass(mo,teamIndex);
 				if (ac != null){ /// Give class items and effects
 					if (am.woolTeams) TeamUtil.setTeamHead(teamIndex, player); // give wool heads first
+
 					if (am.armorTeams){
 						ArenaClassController.giveClass(p, ac, TeamUtil.getTeamColor(teamIndex));
 					} else{
@@ -198,6 +223,11 @@ public class PerformTransition {
 					}
 					player.setChosenClass(ac);
 				}
+			}
+			if (mo.hasOption(TransitionOption.CLASSENCHANTS)){
+				ArenaClass ac = player.getChosenClass();
+				if (ac != null){
+					ArenaClassController.giveClassEnchants(p, ac);}
 			}
 			if (mo.hasOption(TransitionOption.GIVEDISGUISE) && DisguiseInterface.enabled()){
 				final String disguise = getDisguise(mo,teamIndex);
@@ -226,17 +256,14 @@ public class PerformTransition {
 			Location loc = null;
 			if (mo.hasOption(TransitionOption.TELEPORTTO))
 				loc = mo.getTeleportToLoc();
-			else if (mo.hasOption(TransitionOption.TELEPORTONARENAEXIT))
-				loc = mo.getTeleportToLoc();
 			else
 				loc = am.oldlocs.get(player.getName());
 			if (loc == null){
-				Log.err("[BA Error] Teleporting to a null location!  teleportTo=" + mo.hasOption(TransitionOption.TELEPORTTO)+
-						", teleportOnArenaExit="+mo.hasOption(TransitionOption.TELEPORTONARENAEXIT));
+				Log.err("[BA Error] Teleporting to a null location!  teleportTo=" + mo.hasOption(TransitionOption.TELEPORTTO));
 			} else if (insideArena || !onlyInMatch){
 				TeleportController.teleportPlayer(p, loc, wipeInventory, true);
-				am.leaveArena(player);
 			}
+			am.leaveArena(player);
 			/// If players are outside of the match, but need requirements, warn them
 		} else if (transition == MatchState.ONPRESTART && !insideArena){
 			World w = am.getArena().getSpawnLoc(0).getWorld();
@@ -322,7 +349,7 @@ public class PerformTransition {
 	}
 
 
-	private static Location jitter(final Location teamSpawn, int index) {
+	static Location jitter(final Location teamSpawn, int index) {
 		if (index == 0)
 			return teamSpawn;
 		index = index % 6;

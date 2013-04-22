@@ -1,9 +1,9 @@
-package mc.alk.arena.listeners;
+package mc.alk.arena.listeners.competition;
 
 import java.util.Collection;
 
 import mc.alk.arena.controllers.SignController;
-import mc.alk.arena.events.TeamJoinedQueueEvent;
+import mc.alk.arena.events.teams.TeamJoinedQueueEvent;
 import mc.alk.arena.objects.ArenaParams;
 import mc.alk.arena.objects.signs.ArenaStatusSign;
 import mc.alk.arena.util.TimeUtil;

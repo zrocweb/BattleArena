@@ -8,7 +8,7 @@ import mc.alk.arena.objects.ArenaPlayer;
 import mc.alk.arena.objects.MatchState;
 import mc.alk.arena.objects.messaging.AnnouncementOptions;
 import mc.alk.arena.objects.messaging.Channel;
-import mc.alk.arena.objects.teams.Team;
+import mc.alk.arena.objects.teams.ArenaTeam;
 
 
 public class EventMessager {
@@ -21,7 +21,7 @@ public class EventMessager {
 		this.bos = event.getParams().getAnnouncementOptions();
 	}
 
-	private Channel getChannel(MatchState state) {
+	protected Channel getChannel(MatchState state) {
 		if (silent) return Channel.NullChannel;
 		return bos != null && bos.hasOption(false,state) ? bos.getChannel(false,state) :
 			AnnouncementOptions.getDefaultChannel(false,state);
@@ -40,7 +40,7 @@ public class EventMessager {
 		catch(Exception e){e.printStackTrace();}
 	}
 
-	public void sendEventStarting(Collection<Team> teams) {
+	public void sendEventStarting(Collection<ArenaTeam> teams) {
 		try{impl.sendEventStarting(getChannel(MatchState.ONSTART), teams);}catch(Exception e){e.printStackTrace();}
 	}
 
@@ -57,28 +57,33 @@ public class EventMessager {
 //		try{impl.sendTeamJoinedEvent(getChannel(MatchState.ONJOIN),t);}catch(Exception e){e.printStackTrace();}
 //	}
 
-	public void sendEventCancelled(Collection<Team> teams) {
+	public void sendEventCancelled(Collection<ArenaTeam> teams) {
 		try{impl.sendEventCancelled(getChannel(MatchState.ONCANCEL), teams);}catch(Exception e){e.printStackTrace();}
 	}
 
-	public void sendCantFitTeam(Team t) {
+	public void sendCantFitTeam(ArenaTeam t) {
 		try{impl.sendCantFitTeam(t);}catch(Exception e){e.printStackTrace();}
 	}
 
-	public void sendWaitingForMorePlayers(Team t, int remaining) {
+	public void sendWaitingForMorePlayers(ArenaTeam t, int remaining) {
 		try{ impl.sendWaitingForMorePlayers(t, remaining);}catch(Exception e){e.printStackTrace();}
 	}
 	public void setSilent(boolean silent){
 		this.silent = silent;
 	}
 
-	public void sendEventVictory(Collection<Team> victors, Collection<Team> losers) {
+	public void sendEventVictory(Collection<ArenaTeam> victors, Collection<ArenaTeam> losers) {
 		try{impl.sendEventVictory(getChannel(MatchState.ONVICTORY), victors,losers);}catch(Exception e){e.printStackTrace();}
 	}
 
-	public void sendEventDraw(Collection<Team> drawers, Collection<Team> losers) {
+	public void sendEventDraw(Collection<ArenaTeam> drawers, Collection<ArenaTeam> losers) {
 		try{impl.sendEventDraw(getChannel(MatchState.ONVICTORY), drawers, losers);}catch(Exception e){e.printStackTrace();}
 	}
+
+	public void sendTeamJoined(ArenaTeam team) {
+		try{impl.sendTeamJoinedEvent(getChannel(MatchState.ONJOIN),team);}catch(Exception e){e.printStackTrace();}
+	}
+
 
 //	public void sendEventJoin(Team team, ArenaPlayer player) {
 //		try{impl.sendEventJoin(getChannel(MatchState.ONJOIN), drawers, losers);}catch(Exception e){e.printStackTrace();}
