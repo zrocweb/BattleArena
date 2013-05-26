@@ -15,8 +15,9 @@ import mc.alk.arena.events.matches.MatchFinishedEvent;
 import mc.alk.arena.events.matches.MatchPlayersReadyEvent;
 import mc.alk.arena.objects.ArenaPlayer;
 import mc.alk.arena.objects.EventParams;
+import mc.alk.arena.objects.LocationType;
 import mc.alk.arena.objects.arenas.Arena;
-import mc.alk.arena.objects.events.MatchEventHandler;
+import mc.alk.arena.objects.events.ArenaEventHandler;
 import mc.alk.arena.objects.exceptions.NeverWouldJoinException;
 import mc.alk.arena.objects.queues.TeamQObject;
 import mc.alk.arena.objects.teams.ArenaTeam;
@@ -27,6 +28,8 @@ import mc.alk.arena.objects.victoryconditions.interfaces.DefinesLeaderRanking;
 import mc.alk.arena.util.Countdown;
 import mc.alk.arena.util.TeamUtil;
 
+import org.bukkit.Location;
+
 public class ReservedArenaEvent extends Event {
 	public ReservedArenaEvent(EventParams params) {
 		super(params);
@@ -35,17 +38,17 @@ public class ReservedArenaEvent extends Event {
 
 	Match arenaMatch;
 
-	public void openEvent(EventParams mp, Arena arena) throws NeverWouldJoinException {
-		arenaMatch = new ArenaMatch(arena, mp);
-		arenaMatch.setTeamJoinHandler(null); /// we are taking care of this
-		openEvent(mp);
-	}
-
 	public void autoEvent(EventParams mp, Arena arena) throws NeverWouldJoinException {
 		openEvent(mp,arena);
 		mc.sendCountdownTillEvent(mp.getSecondsTillStart());
 		/// Set a countdown to announce updates every minute
 		timer = new Countdown(BattleArena.getSelf(),mp.getSecondsTillStart(), mp.getAnnouncementInterval(), this);
+	}
+
+	public void openEvent(EventParams mp, Arena arena) throws NeverWouldJoinException {
+		arenaMatch = new ArenaMatch(arena, mp);
+		arenaMatch.setTeamJoinHandler(null); /// we are taking care of this
+		openEvent(mp);
 	}
 
 	@Override
@@ -97,21 +100,21 @@ public class ReservedArenaEvent extends Event {
 		startRound();
 	}
 
-	@MatchEventHandler
+	@ArenaEventHandler
 	public void allPlayersReady(MatchPlayersReadyEvent event){
 		if (joinHandler != null && joinHandler.hasEnough(true)){
 			startEvent();
 		}
 	}
 
-	@MatchEventHandler
+	@ArenaEventHandler
 	public void matchCompleted(MatchCompletedEvent event){
 		if (Defaults.DEBUG_TRACE) System.out.println("ReservedArenaEvent::matchComplete " +arenaMatch +"   isRunning()=" + isRunning());
 
-		setEventResult(arenaMatch.getResult());
+		setEventResult(arenaMatch.getResult(),false);
 	}
 
-	@MatchEventHandler
+	@ArenaEventHandler
 	public void matchFinished(MatchFinishedEvent event){
 		eventCompleted();
 	}
@@ -197,5 +200,22 @@ public class ReservedArenaEvent extends Event {
 	}
 	public Match getMatch(){
 		return arenaMatch;
+	}
+
+	@Override
+	public Location getSpawn(int index, LocationType type, boolean random) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public Location getSpawn(ArenaPlayer player, LocationType type, boolean random) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public LocationType getLocationType() {
+		return LocationType.ARENA;
 	}
 }

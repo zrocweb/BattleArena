@@ -7,6 +7,7 @@ import mc.alk.arena.objects.arenas.ArenaType;
 import mc.alk.arena.serializers.ArenaSerializer;
 import mc.alk.arena.serializers.ConfigSerializer;
 import mc.alk.arena.serializers.MessageSerializer;
+import mc.alk.arena.util.Log;
 
 import org.bukkit.plugin.Plugin;
 
@@ -78,10 +79,14 @@ public class RegisteredCompetition {
 			/// The config serializer will also deal with MatchParams registration and aliases
 			configSerializer.loadMatchParams();
 		} catch (Exception e) {
-			e.printStackTrace();
+			Log.printStackTrace(e);
 		}
 		if (plugin != BattleArena.getSelf())
 			plugin.reloadConfig();
+	}
+
+	public void saveParams(MatchParams params){
+		configSerializer.save(params);
 	}
 
 	public Plugin getPlugin(){

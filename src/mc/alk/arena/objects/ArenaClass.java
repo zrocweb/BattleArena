@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import mc.alk.arena.objects.spawns.SpawnInstance;
 import mc.alk.arena.util.InventoryUtil;
 
 import org.bukkit.inventory.ItemStack;
@@ -25,8 +26,21 @@ public class ArenaClass {
 	/** Effects this class gives*/
 	final List<PotionEffect> effects;
 
+	/** Mobs for this class*/
+	List<SpawnInstance> mobs;
+
 	/** Name of a disguise for this class */
 	String disguiseName;
+
+	/** List of commands to run when class is given */
+	List<CommandLineString> commands;
+
+	boolean valid = false;
+
+	public ArenaClass(String name){
+		this(name,name,new ArrayList<ItemStack>(),new ArrayList<PotionEffect>());
+		valid = false;
+	}
 
 	public ArenaClass(String name, String displayName, List<ItemStack> items, List<PotionEffect> effects){
 		this.name = name;
@@ -45,6 +59,7 @@ public class ArenaClass {
 		this.items.addAll(armoritems);
 		this.effects = effects;
 		this.displayName = displayName;
+		valid = true;
 	}
 
 	/**
@@ -100,4 +115,21 @@ public class ArenaClass {
 		return "[ArenaClass "+name+" items="+items +" enchants=" + effects+"]";
 	}
 
+	public boolean valid() {
+		return valid;
+	}
+
+	public void setMobs(List<SpawnInstance> mobs) {
+		this.mobs = mobs;
+	}
+
+	public List<SpawnInstance> getMobs(){
+		return mobs;
+	}
+	public List<CommandLineString> getDoCommands(){
+		return this.commands;
+	}
+	public void setDoCommands(List<CommandLineString> commands){
+		this.commands = commands;
+	}
 }

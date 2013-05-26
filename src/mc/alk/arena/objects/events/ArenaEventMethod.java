@@ -6,7 +6,7 @@ import mc.alk.arena.objects.MatchState;
 
 import org.bukkit.event.Event;
 
-public class MatchEventMethod implements Comparable<MatchEventMethod>{
+public class ArenaEventMethod {
 	final Method callMethod;
 	final Class<? extends Event> bukkitEvent;
 	final Method getPlayerMethod;
@@ -14,13 +14,13 @@ public class MatchEventMethod implements Comparable<MatchEventMethod>{
 	final EventPriority priority;
 	final org.bukkit.event.EventPriority bukkitPriority;
 
-	public MatchEventMethod(Method callMethod, Class<? extends Event> event,
+	public ArenaEventMethod(Method callMethod, Class<? extends Event> event,
 			MatchState begin, MatchState end, MatchState cancel, EventPriority priority,
 			org.bukkit.event.EventPriority bukkitPriority) {
 		this(callMethod,event,null,begin,end,cancel,priority, bukkitPriority);
 	}
 
-	public MatchEventMethod(Method callMethod, Class<? extends Event> event,Method getPlayerMethod,
+	public ArenaEventMethod(Method callMethod, Class<? extends Event> event,Method getPlayerMethod,
 			MatchState begin, MatchState end, MatchState cancel, EventPriority priority,
 			org.bukkit.event.EventPriority bukkitPriority) {
 		this.callMethod = callMethod;
@@ -70,11 +70,6 @@ public class MatchEventMethod implements Comparable<MatchEventMethod>{
 	public String toString(){
 		return "[MEM "+callMethod.getName()+", " + (bukkitEvent != null ? bukkitEvent.getSimpleName():"null")+
 				" p="+bukkitPriority+" "  + beginState+":"+endState+"   playerMethod=" + getPlayerMethod+"]";
-	}
-
-	@Override
-	public int compareTo(MatchEventMethod arg0) {
-		return this.priority.compareTo(arg0.priority);
 	}
 
 	public org.bukkit.event.EventPriority getBukkitPriority() {

@@ -7,8 +7,8 @@ import java.util.TreeMap;
 import mc.alk.arena.competition.match.Match;
 import mc.alk.arena.events.matches.MatchFindCurrentLeaderEvent;
 import mc.alk.arena.objects.ArenaPlayer;
+import mc.alk.arena.objects.events.ArenaEventHandler;
 import mc.alk.arena.objects.events.EventPriority;
-import mc.alk.arena.objects.events.MatchEventHandler;
 import mc.alk.arena.objects.scoreboard.ArenaObjective;
 import mc.alk.arena.objects.scoreboard.ArenaScoreboard;
 import mc.alk.arena.objects.teams.ArenaTeam;
@@ -23,7 +23,7 @@ public class MobKills extends VictoryCondition implements ScoreTracker{
 
 	public MobKills(Match match) {
 		super(match);
-		this.mkills = new ArenaObjective("mobkills","Kill Mobs");
+		this.mkills = new ArenaObjective("mobkills","Kill Mobs",5);
 		this.mkills.setDisplayName(MessageUtil.colorChat("&4Mob Kills"));
 	}
 
@@ -37,7 +37,7 @@ public class MobKills extends VictoryCondition implements ScoreTracker{
 		return mkills.getTeamRanks();
 	}
 
-	@MatchEventHandler(priority=EventPriority.LOW)
+	@ArenaEventHandler(priority=EventPriority.LOW)
 	public void mobDeathEvent(EntityDeathEvent event) {
 		switch(event.getEntityType()){
 		case BAT:
@@ -98,6 +98,7 @@ public class MobKills extends VictoryCondition implements ScoreTracker{
 			return;
 		}
 		ArenaPlayer killer = DmgDeathUtil.getPlayerCause(event.getEntity().getLastDamageCause());
+
 		if (killer == null){
 			return;}
 		ArenaTeam t = match.getTeam(killer);
@@ -108,7 +109,7 @@ public class MobKills extends VictoryCondition implements ScoreTracker{
 		mkills.addPoints(killer, 1);
 	}
 
-	@MatchEventHandler(priority = EventPriority.LOW)
+	@ArenaEventHandler(priority = EventPriority.LOW)
 	public void onFindCurrentLeader(MatchFindCurrentLeaderEvent event) {
 		Collection<ArenaTeam> leaders = mkills.getTeamLeaders();
 		if (leaders.size() > 1){

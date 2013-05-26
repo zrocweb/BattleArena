@@ -1,5 +1,9 @@
 package mc.alk.arena.objects.options;
 
+import mc.alk.arena.util.MinMax;
+
+import org.bukkit.GameMode;
+
 public enum TransitionOption{
 	/// Default only Options
 	DUELONLY ("duelOnly", false),					/// DEFAULTS only: this game type is duel only
@@ -37,7 +41,7 @@ public enum TransitionOption{
 	WOOLTEAMS("woolTeams",false),					/// Use team Heads when team sizes are greater than 1 (found in teamColors.yml)
 	ALWAYSWOOLTEAMS("alwaysWoolTeams", false),		/// Always use team Heads (found in teamColors.yml)
 	ALWAYSTEAMNAMES("alwaysTeamNames", false),		/// Always use team Names (found in teamColors.yml)
-
+	NOTEAMNAMECOLOR("noTeamNameColor", false),		/// Dont use team name color
 
 	/// Teleport Options
 	TELEPORTWAITROOM("teleportWaitRoom",false), 	/// Teleport players to the waitroom
@@ -48,6 +52,7 @@ public enum TransitionOption{
 	TELEPORTTO("teleportTo", true), 				/// =<location> : Teleport players to the given
 	NOTELEPORT("noTeleport", false), 				/// Prevent players from teleporting
 	NOWORLDCHANGE("noWorldChange",false),			/// Prevent players from changing world
+	RESPAWNTIME("respawnTime", true),				/// Set a timer that will respawn a player back at the team spawn
 
 	/// Normal Stage Options
 	CLEARINVENTORY ("clearInventory",false), 		/// Clear the players inventory
@@ -73,6 +78,7 @@ public enum TransitionOption{
 	BLOCKPLACEOFF("blockPlaceOff",false),			/// Disallow block place
 	BLOCKPLACEON("blockPlaceOn",false),				/// Allow player to place blocks
 	ITEMDROPOFF("itemDropOff",false),				/// Stop the player from throwing/dropping items
+	ITEMPICKUPOFF("itemPickupOff",false),			/// Stop the player from pickkingup items
 	DISGUISEALLAS("disguiseAllAs",true),			/// =<String> : Disguise the players as the given mob/player (needs DisguiseCraft)
 	UNDISGUISE("undisguise",false),					/// Undisguise all players in the arena (needs DisguiseCraft)
 	ENCHANTS("enchants",false),						/// Give the Enchants found in enchants:
@@ -130,5 +136,38 @@ public enum TransitionOption{
 				return TransitionOption.WGRESETREGION;
 			throw new IllegalArgumentException(e.getMessage());
 		}
+	}
+
+	public Object parseValue(String value) throws Exception{
+		/// Handle values for this option
+		switch(this){
+		case MONEY:
+			return Double.valueOf(value);
+		case LEVELRANGE:
+			return MinMax.valueOf(value);
+		case DISGUISEALLAS:
+			return value;
+		case HEALTH: case HEALTHP:
+		case MAGIC: case MAGICP:
+		case HUNGER:
+		case EXPERIENCE:
+		case WITHINDISTANCE:
+			return Integer.valueOf(value);
+		case INVULNERABLE:
+			return Integer.valueOf(value)*20; // multiply by number of ticks per second
+		case FLIGHTSPEED:
+			return Float.valueOf(value);
+		case GAMEMODE:
+			GameMode gm = null;
+			try {
+				gm = GameMode.getByValue(Integer.valueOf(value));
+			} catch (Exception e){
+				gm = GameMode.valueOf(value.toUpperCase());
+			}
+			return gm; // multiply by number of ticks per second
+		default:
+			break;
+		}
+		return null;
 	}
 };
