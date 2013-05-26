@@ -1,12 +1,16 @@
 package mc.alk.arena.objects;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
+import mc.alk.arena.controllers.LobbyController;
 import mc.alk.arena.objects.arenas.ArenaType;
 import mc.alk.arena.objects.messaging.AnnouncementOptions;
 import mc.alk.arena.objects.modules.ArenaModule;
+import mc.alk.arena.objects.options.TransitionOption;
 import mc.alk.arena.objects.victoryconditions.VictoryType;
 import mc.alk.arena.util.MessageUtil;
 
@@ -20,28 +24,33 @@ public class MatchParams extends ArenaParams implements Comparable<MatchParams>{
 	Integer matchTime, intervalTime;
 	AnnouncementOptions ao = null;
 
-	Integer nDeaths = 1;
-	boolean overrideDefaultBattleTracker = true;
+	Integer nLives = 1;
 	int numConcurrentCompetitions = Integer.MAX_VALUE;
 	Set<ArenaModule> modules = new HashSet<ArenaModule>();
+	Boolean useBTPvP;
+	Boolean useBTMessages;
+	MatchParams mparent=null;
 
-	public MatchParams(ArenaType at, Rating rating, VictoryType vc) {
+	public MatchParams(ArenaType at) {
 		super(at);
 		this.setRating(rating);
-		this.vc = vc;
 	}
 
 	public MatchParams(MatchParams mp) {
 		super(mp);
 		this.prefix = mp.prefix;
 		this.vc = mp.vc;
+
 		this.matchTime = mp.matchTime;
 		this.intervalTime = mp.intervalTime;
 		this.ao = mp.ao;
-		this.nDeaths = mp.nDeaths;
+		this.nLives = mp.nLives;
 		this.numConcurrentCompetitions = mp.numConcurrentCompetitions;
 		this.modules = new HashSet<ArenaModule>(mp.modules);
+		this.mparent = mp.mparent;
 	}
+
+	public void setVictoryType(VictoryType type){this.vc = type;}
 
 	public VictoryType getVictoryType() {return vc;}
 
@@ -63,7 +72,7 @@ public class MatchParams extends ArenaParams implements Comparable<MatchParams>{
 
 
 	public Integer getMatchTime() {
-		return matchTime;
+		return matchTime == null && mparent!=null ? mparent.getMatchTime() : matchTime;
 	}
 
 	public void setMatchTime(Integer matchTime) {
@@ -71,19 +80,19 @@ public class MatchParams extends ArenaParams implements Comparable<MatchParams>{
 	}
 
 	public Integer getIntervalTime() {
-		return intervalTime;
+		return intervalTime ==null && mparent!=null ? mparent.getIntervalTime() : intervalTime;
 	}
 
 	public void setIntervalTime(Integer intervalTime) {
 		this.intervalTime = intervalTime;
 	}
 
-	public void setNLives(Integer ndeaths){
-		this.nDeaths = ndeaths;
+	public void setNLives(Integer nlives){
+		this.nLives = nlives;
 	}
 
 	public Integer getNLives(){
-		return nDeaths;
+		return nLives==null&&mparent!=null ? mparent.getNLives() : nLives;
 	}
 
 	@Override
@@ -108,18 +117,11 @@ public class MatchParams extends ArenaParams implements Comparable<MatchParams>{
 
 	@Override
 	public String toString(){
-		return super.toString()+",vc=" + vc.getName();
+		return super.toString()+",vc=" + vc;
 	}
 
 	public ChatColor getColor() {
 		return MessageUtil.getFirstColor(prefix);
-	}
-
-	public void setOverrideBattleTracker(boolean enable) {
-		overrideDefaultBattleTracker = enable;
-	}
-	public boolean getOverrideBattleTracker() {
-		return overrideDefaultBattleTracker;
 	}
 
 	public void setNConcurrentCompetitions(int number) {
@@ -137,7 +139,64 @@ public class MatchParams extends ArenaParams implements Comparable<MatchParams>{
 	public void addModule(ArenaModule am) {
 		modules.add(am);
 	}
+
 	public Collection<ArenaModule> getModules(){
 		return modules;
 	}
+
+	public Collection<ArenaModule> getAllModules(){
+		List<ArenaModule> ms = new ArrayList<ArenaModule>(modules);
+		if (mparent != null){
+			ms.addAll(mparent.getAllModules());}
+		return ms;
+	}
+
+	public void setUseTrackerPvP(Boolean enable) {
+		useBTPvP = enable;
+	}
+
+	public Boolean getUseTrackerPvP() {
+		return useBTPvP != null ? useBTPvP : (mparent!= null ? mparent.getUseTrackerPvP() : null);
+	}
+
+
+	public Boolean getUseTrackerMessages() {
+		return useBTMessages != null ? useBTMessages : (mparent!= null ? mparent.getUseTrackerMessages() : null);
+	}
+
+	public void setUseTrackerMessages(Boolean enable) {
+		useBTMessages = enable;
+	}
+	public void setForceStartTime(long forceStartTime) {
+
+	}
+	@Override
+	public boolean valid() {
+		return super.valid() &&
+				(!getTransitionOptions().hasAnyOption(TransitionOption.TELEPORTLOBBY) ||
+						LobbyController.hasLobby(getType()));
+	}
+
+	@Override
+	public Collection<String> getInvalidReasons() {
+		List<String> reasons = new ArrayList<String>();
+		if (getTransitionOptions().hasAnyOption(TransitionOption.TELEPORTLOBBY) && !LobbyController.hasLobby(getType()))
+				reasons.add("Needs a Lobby");
+		reasons.addAll(super.getInvalidReasons());
+		return reasons;
+	}
+
+	@Override
+	public void setParent(ArenaParams parent) {
+		super.setParent(parent);
+		if (parent instanceof MatchParams){
+			this.mparent = (MatchParams) parent;}
+		else
+			this.mparent = null;
+	}
+
+	public boolean hasLobby() {
+		return this.getTransitionOptions().hasAnyOption(TransitionOption.TELEPORTLOBBY);
+	}
+
 }

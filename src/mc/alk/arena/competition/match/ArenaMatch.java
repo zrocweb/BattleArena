@@ -2,29 +2,34 @@ package mc.alk.arena.competition.match;
 
 import java.awt.Color;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import mc.alk.arena.BattleArena;
 import mc.alk.arena.Defaults;
-import mc.alk.arena.Permissions;
 import mc.alk.arena.controllers.ArenaClassController;
+import mc.alk.arena.controllers.LobbyController;
+import mc.alk.arena.controllers.TeleportController;
 import mc.alk.arena.controllers.WorldGuardController;
-import mc.alk.arena.events.matches.MatchClassSelectedEvent;
 import mc.alk.arena.events.matches.MatchPlayersReadyEvent;
+import mc.alk.arena.events.players.ArenaPlayerClassSelectedEvent;
 import mc.alk.arena.events.players.ArenaPlayerDeathEvent;
 import mc.alk.arena.events.players.ArenaPlayerKillEvent;
 import mc.alk.arena.events.players.ArenaPlayerReadyEvent;
 import mc.alk.arena.events.teams.TeamDeathEvent;
+import mc.alk.arena.listeners.PlayerHolder;
 import mc.alk.arena.objects.ArenaClass;
 import mc.alk.arena.objects.ArenaPlayer;
+import mc.alk.arena.objects.LocationType;
 import mc.alk.arena.objects.MatchParams;
 import mc.alk.arena.objects.MatchState;
+import mc.alk.arena.objects.MatchTransitions;
 import mc.alk.arena.objects.PVPState;
 import mc.alk.arena.objects.arenas.Arena;
+import mc.alk.arena.objects.events.ArenaEventHandler;
 import mc.alk.arena.objects.events.EventPriority;
-import mc.alk.arena.objects.events.MatchEventHandler;
 import mc.alk.arena.objects.options.TransitionOption;
 import mc.alk.arena.objects.options.TransitionOptions;
 import mc.alk.arena.objects.teams.ArenaTeam;
@@ -42,46 +47,41 @@ import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
-import org.bukkit.block.Block;
 import org.bukkit.block.Sign;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.Action;
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
-import org.bukkit.event.entity.PotionSplashEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
-import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
-import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.ItemStack;
 
 
 /**
- * TODO once I add in GameLogic, transfer all of this into a module
- *
+ * TODO transfer most of this into their own listeners
+ * like ItemDropListener
  */
 public class ArenaMatch extends Match {
 	static HashSet<String> disabledCommands = new HashSet<String>();
 
-	HashMap<String, Long> userTime = new HashMap<String, Long>();
-	HashMap<String, Integer> deathTimer = new HashMap<String, Integer>();
+	Map<String, Long> userTime = new ConcurrentHashMap<String, Long>();
+	Map<String, Integer> deathTimer = new ConcurrentHashMap<String, Integer>();
+	Map<String, Integer> respawnTimer = new ConcurrentHashMap<String, Integer>();
 
 	public ArenaMatch(Arena arena, MatchParams mp) {
 		super(arena, mp);
 	}
 
-	@MatchEventHandler(priority=EventPriority.HIGH)
+	@ArenaEventHandler(priority=EventPriority.HIGH)
 	public void onPlayerQuit(PlayerQuitEvent event){
 		/// If they are just in the arena waiting for match to start, or they havent joined yet
 		if (state == MatchState.ONCOMPLETE || state == MatchState.ONCANCEL ||
-				!insideArena.contains(event.getPlayer().getName())){
+				!insideArena.contains(event.getPlayer().getName()) ){
 			return;}
 		ArenaPlayer player = BattleArena.toArenaPlayer(event.getPlayer());
 		ArenaTeam t = getTeam(player);
@@ -92,12 +92,11 @@ public class ArenaMatch extends Match {
 		checkAndHandleIfTeamDead(t);
 	}
 
-	@MatchEventHandler(suppressCastWarnings=true,priority=EventPriority.HIGH)
+	@ArenaEventHandler(suppressCastWarnings=true,priority=EventPriority.HIGH)
 	public void onPlayerDeath(PlayerDeathEvent event, final ArenaPlayer target){
 		if (state == MatchState.ONCANCEL || state == MatchState.ONCOMPLETE ||
 				!insideArena.contains(target.getName())){
 			return;}
-
 		final ArenaTeam t = getTeam(target);
 		if (t==null)
 			return;
@@ -115,7 +114,7 @@ public class ArenaMatch extends Match {
 		}
 	}
 
-	@MatchEventHandler(priority=EventPriority.HIGH)
+	@ArenaEventHandler(priority=EventPriority.HIGH)
 	public void onPlayerDeath(ArenaPlayerDeathEvent event){
 		final ArenaPlayer target = event.getPlayer();
 		if (state == MatchState.ONCANCEL || state == MatchState.ONCOMPLETE ||
@@ -187,7 +186,7 @@ public class ArenaMatch extends Match {
 		}
 	}
 
-	@MatchEventHandler(suppressCastWarnings=true,priority=EventPriority.LOW)
+	@ArenaEventHandler(suppressCastWarnings=true,priority=EventPriority.LOW)
 	public void onEntityDamageByEntity(EntityDamageEvent event) {
 		if (!(event.getEntity() instanceof Player))
 			return;
@@ -286,8 +285,9 @@ public class ArenaMatch extends Match {
 //		}
 //	}
 
-	@MatchEventHandler(priority=EventPriority.HIGH)
+	@ArenaEventHandler(priority=EventPriority.HIGH)
 	public void onPlayerRespawn(PlayerRespawnEvent event, final ArenaPlayer p){
+		p.setCurrentClass(null);
 		if (isWon()){
 			return;}
 		final TransitionOptions mo = tops.getOptions(MatchState.ONDEATH);
@@ -299,7 +299,32 @@ public class ArenaMatch extends Match {
 			Integer timer = deathTimer.get(p.getName());
 			if (timer != null){
 				Bukkit.getScheduler().cancelTask(timer);}
-			Location loc = getTeamSpawn(getTeam(p), mo.randomRespawn());
+			final Location loc;
+			final ArenaTeam t = getTeam(p);
+			if (mo.hasOption(TransitionOption.TELEPORTLOBBY) || mo.hasOption(TransitionOption.TELEPORTWAITROOM)){
+				final int index = this.getTeamIndex(t);
+				if (mo.hasOption(TransitionOption.TELEPORTLOBBY)){
+					loc = LobbyController.getLobbySpawn(index, getParams().getType(), mo.randomRespawn());
+				} else {
+					loc = this.getWaitRoomSpawn(index, mo.randomRespawn());
+				}
+				/// Should we respawn the player to the team spawn after a certain amount of time
+				if (mo.hasOption(TransitionOption.RESPAWNTIME)){
+					int id = Bukkit.getScheduler().scheduleSyncDelayedTask(BattleArena.getSelf(), new Runnable(){
+						@Override
+						public void run() {
+							Integer id = respawnTimer.remove(p.getName());
+							Bukkit.getScheduler().cancelTask(id);
+							Location loc = getTeamSpawn(index, tops.hasOptionAt(MatchState.ONSPAWN, TransitionOption.RANDOMRESPAWN));
+							TeleportController.teleport(p.getPlayer(), loc);
+						}
+					}, mo.getRespawnTime()*20);
+					respawnTimer.put(p.getName(), id);
+				}
+			} else {
+				loc = getTeamSpawn(getTeam(p), mo.randomRespawn());
+			}
+
 			event.setRespawnLocation(loc);
 			/// For some reason, the player from onPlayerRespawn Event isnt the one in the main thread, so we need to
 			/// resync before doing any effects
@@ -313,13 +338,11 @@ public class ArenaMatch extends Match {
 					} catch(Exception e){}
 					if (respawnsWithClass){
 						try{
-							if (p.getChosenClass() != null){
-								ArenaClass ac = p.getChosenClass();
-								ArenaClassController.giveClass(p.getPlayer(), ac);
+							if (p.getPreferredClass() != null){
+								ArenaClass ac = p.getPreferredClass();
+								ArenaClassController.giveClass(p, ac);
 							}
 						} catch(Exception e){}
-					} else {
-						p.setChosenClass(null);
 					}
 					if (keepsInventory){
 						psc.restoreMatchItems(p);
@@ -344,30 +367,9 @@ public class ArenaMatch extends Match {
 		}
 	}
 
-	@MatchEventHandler(priority=EventPriority.HIGH)
-	public void onPlayerBlockBreak(BlockBreakEvent event){
-		if (tops.hasOptionAt(state, TransitionOption.BLOCKBREAKOFF)){
-			event.setCancelled(true);}
-	}
-
-	@MatchEventHandler(priority=EventPriority.HIGH)
-	public void onPlayerBlockPlace(BlockPlaceEvent event){
-		if (tops.hasOptionAt(state, TransitionOption.BLOCKPLACEOFF)){
-			event.setCancelled(true);}
-	}
-
-	@MatchEventHandler(priority=EventPriority.HIGH)
-	public void onPlayerDropItem(PlayerDropItemEvent event){
-		if (tops.hasOptionAt(state, TransitionOption.ITEMDROPOFF)){
-			event.setCancelled(true);}
-	}
-
-	@MatchEventHandler(priority=EventPriority.HIGH)
+	@ArenaEventHandler(priority=EventPriority.HIGH)
 	public void onPlayerMove(PlayerMoveEvent event){
-		TransitionOptions to = tops.getOptions(state);
-		if (to==null)
-			return;
-		if (arena.hasRegion() && to.hasOption(TransitionOption.WGNOLEAVE) && WorldGuardController.hasWorldGuard()){
+		if (arena.hasRegion() && tops.hasInArenaOrOptionAt(state,TransitionOption.WGNOLEAVE) && WorldGuardController.hasWorldGuard()){
 			/// Did we actually even move
 			if (event.getFrom().getBlockX() != event.getTo().getBlockX()
 					|| event.getFrom().getBlockY() != event.getTo().getBlockY()
@@ -387,14 +389,14 @@ public class ArenaMatch extends Match {
 	 * so we need to act before them
 	 * @param event
 	 */
-	@MatchEventHandler(priority=EventPriority.HIGH, bukkitPriority=org.bukkit.event.EventPriority.LOWEST)
+	@ArenaEventHandler(priority=EventPriority.HIGH, bukkitPriority=org.bukkit.event.EventPriority.LOWEST)
 	public void onPlayerCommandPreprocess1(PlayerCommandPreprocessEvent event){
 		handlePreprocess(event);
 	}
 
-	@MatchEventHandler(priority=EventPriority.HIGH)
+	@ArenaEventHandler(priority=EventPriority.HIGH)
 	public void onPlayerCommandPreprocess2(PlayerCommandPreprocessEvent event){
-		if (event.isCancelled() || state == MatchState.ONCOMPLETE || state == MatchState.ONCANCEL){
+		if (event.isCancelled()){
 			return;}
 		handlePreprocess(event);
 	}
@@ -408,42 +410,44 @@ public class ArenaMatch extends Match {
 		}
 	}
 
-	@MatchEventHandler(priority=EventPriority.HIGH)
+	@ArenaEventHandler(priority=EventPriority.HIGH)
 	public void onPlayerInteract(PlayerInteractEvent event){
-		if (event.isCancelled())
+		playerInteract(event);
+	}
+	public void playerInteract(PlayerInteractEvent event){
+		if (event.isCancelled() || event.getClickedBlock() == null)
 			return;
-		final Block b = event.getClickedBlock();
-		if (b == null) /// It's happened.. minecraft is a strange beast
+
+		if (!(event.getClickedBlock().getType().equals(Material.SIGN) ||
+				event.getClickedBlock().getType().equals(Material.WALL_SIGN) ||
+				event.getClickedBlock().getType().equals(Defaults.READY_BLOCK)
+				)) {
 			return;
+		}
+
 		/// Check to see if it's a sign
-		final Material m = b.getType();
-		if (m.equals(Material.SIGN) || m.equals(Material.SIGN_POST)||m.equals(Material.WALL_SIGN)){ /// Only checking for signs
-			signClick(event);
-		} else if (m.equals(Defaults.READY_BLOCK)) {
-			readyClick(event);
+		if (event.getClickedBlock().getType().equals(Material.SIGN) ||
+				event.getClickedBlock().getType().equals(Material.WALL_SIGN)){ /// Only checking for signs
+			signClick(event,this,userTime);
+		} else { /// its a ready block
+			if (respawnTimer.containsKey(event.getPlayer().getName())){
+				respawnClick(event,this,respawnTimer);
+			} else {
+				readyClick(event);
+			}
 		}
 	}
 
-	private void readyClick(PlayerInteractEvent event) {
-		if (!Defaults.ENABLE_PLAYER_READY_BLOCK)
-			return;
-		if (!isInWaitRoomState()){
-			return;}
-		final Action action = event.getAction();
-		if (action == Action.LEFT_CLICK_BLOCK){ /// Dont let them break the block
-			event.setCancelled(true);}
-		final ArenaPlayer ap = BattleArena.toArenaPlayer(event.getPlayer());
-		if (readyPlayers != null && readyPlayers.contains(ap)) /// they are already ready
-			return;
-		setReady(ap);
-		MessageUtil.sendMessage(ap, "&2You ready yourself for the arena");
-		int size = getAlivePlayers().size();
-		if (size == readyPlayers.size()){
-			callEvent(new MatchPlayersReadyEvent(this));
-		}
+	public static void respawnClick(PlayerInteractEvent event, PlayerHolder am, Map<String,Integer> respawnTimer) {
+		ArenaPlayer ap = BattleArena.toArenaPlayer(event.getPlayer());
+		Integer id = respawnTimer.remove(ap.getName());
+		MatchTransitions tops = am.getParams().getTransitionOptions();
+		Bukkit.getScheduler().cancelTask(id);
+		Location loc = am.getSpawn(am.indexOf(am.getTeam(ap)),LocationType.ANY, tops.hasOptionAt(MatchState.ONSPAWN, TransitionOption.RANDOMRESPAWN));
+		TeleportController.teleport(ap.getPlayer(), loc);
 	}
 
-	private void signClick(PlayerInteractEvent event) {
+	public static void signClick(PlayerInteractEvent event, PlayerHolder am,Map<String,Long> userTime) {
 		/// Get our sign
 		final Sign sign = (Sign) event.getClickedBlock().getState();
 		/// Check to see if sign has correct format (is more efficient than doing string manipulation )
@@ -457,7 +461,7 @@ public class ArenaMatch extends Match {
 			event.setCancelled(true);}
 
 		final ArenaClass ac = ArenaClassController.getClass(MessageUtil.decolorChat(sign.getLine(0)).replace('*',' ').trim());
-		if (ac == null) /// Not a valid class sign
+		if (ac == null || !ac.valid()) /// Not a valid class sign
 			return;
 
 		final Player p = event.getPlayer();
@@ -467,7 +471,7 @@ public class ArenaMatch extends Match {
 		}
 
 		final ArenaPlayer ap = BattleArena.toArenaPlayer(p);
-		ArenaClass chosen = ap.getChosenClass();
+		ArenaClass chosen = ap.getCurrentClass();
 		if (chosen != null && chosen.getName().equals(ac.getName())){
 			MessageUtil.sendMessage(p, "&cYou already are a &6" + ac.getName());
 			return;
@@ -479,13 +483,14 @@ public class ArenaMatch extends Match {
 				return;
 			}
 		}
-
+		MatchTransitions tops = am.getParams().getTransitionOptions();
 		userTime.put(playerName, System.currentTimeMillis());
 
-		final TransitionOptions mo = tops.getOptions(state);
+		final TransitionOptions mo = tops.getOptions(am.getMatchState());
 		final TransitionOptions ro = tops.getOptions(MatchState.ONSPAWN);
 		if (mo == null && ro == null)
 			return;
+		boolean woolTeams = tops.hasAnyOption(TransitionOption.WOOLTEAMS);
 		/// Have They have already selected a class this match, have they changed their inventory since then?
 		/// If so, make sure they can't just select a class, drop the items, then choose another
 		if (chosen != null){
@@ -499,15 +504,17 @@ public class ArenaMatch extends Match {
 				return;
 			}
 		}
-		callEvent(new MatchClassSelectedEvent(this,ac));
+		am.callEvent(new ArenaPlayerClassSelectedEvent(ac));
 
 		/// Clear their inventory first, then give them the class and whatever items were due to them from the config
 		InventoryUtil.clearInventory(p, woolTeams);
 		/// Also debuff them
 		EffectUtil.deEnchantAll(p);
-		Color color = this.armorTeams ? TeamUtil.getTeamColor(getTeamIndex(getTeam(ap))) : null;
+		boolean armorTeams = tops.hasAnyOption(TransitionOption.ARMORTEAMS);
+		Color color = armorTeams ? TeamUtil.getTeamColor(am.indexOf(am.getTeam(ap))) : null;
+		ap.despawnMobs();
 		/// Regive class/items
-		ArenaClassController.giveClass(p, ac);
+		ArenaClassController.giveClass(ap, ac);
 		if (mo != null && mo.hasItems()){
 			try{ InventoryUtil.addItemsToInventory(p, mo.getGiveItems(), true,color);} catch(Exception e){Log.printStackTrace(e);}}
 		if (ro != null && ro.hasItems()){
@@ -519,62 +526,48 @@ public class ArenaMatch extends Match {
 		if (ro != null && ro.getEffects()!=null){
 			EffectUtil.enchantPlayer(p, ro.getEffects());}
 
-		ap.setChosenClass(ac);
+		ap.setPreferredClass(ac);
 		MessageUtil.sendMessage(p, "&2You have chosen the &6"+ac.getName());
 	}
 
-	@MatchEventHandler(priority=EventPriority.HIGH)
-	public void onPlayerTeleport(PlayerTeleportEvent event){
-		if (event.isCancelled() || event.getPlayer().hasPermission(Permissions.TELEPORT_BYPASS_PERM))
+
+	private void readyClick(PlayerInteractEvent event) {
+		if (!Defaults.ENABLE_PLAYER_READY_BLOCK)
 			return;
-		TransitionOptions ops = tops.getOptions(state);
-		if (ops==null)
+		final ArenaPlayer ap = BattleArena.toArenaPlayer(event.getPlayer());
+		if (!isInWaitRoomState()){
+			return;}
+		final Action action = event.getAction();
+		if (action == Action.LEFT_CLICK_BLOCK){ /// Dont let them break the block
+			event.setCancelled(true);}
+
+		if (ap.isReady())
 			return;
-		if (ops.hasOption(TransitionOption.NOTELEPORT)){
-			MessageUtil.sendMessage(event.getPlayer(), "&cTeleports are disabled in this arena");
-			event.setCancelled(true);
-			return;
-		}
-		if (ops.hasOption(TransitionOption.NOWORLDCHANGE)){
-			if (event.getFrom().getWorld().getUID() != event.getTo().getWorld().getUID()){
-				MessageUtil.sendMessage(event.getPlayer(), "&cWorldChanges are disabled in this arena");
-				event.setCancelled(true);
-			}
-		}
+		ap.setReady(true);
+		MessageUtil.sendMessage(ap, "&2You ready yourself for the arena");
+		callEvent(new ArenaPlayerReadyEvent(ap,true));
 	}
 
-	@MatchEventHandler(needsPlayer=false)
-	public void onPotionSplash(PotionSplashEvent event) {
-		if (!event.isCancelled())
-			return;
-		if (event.getEntity().getShooter() instanceof Player){
-			Player p = (Player) event.getEntity().getShooter();
-			ArenaPlayer ap = BattleArena.toArenaPlayer(p);
-			if (insideArena(ap) &&
-					getParams().getTransitionOptions().hasOptionAt(getState(), TransitionOption.POTIONDAMAGEON)){
-				event.setCancelled(false);
-			}
-		}
-	}
-
-	@MatchEventHandler
+	@ArenaEventHandler
 	public void onPlayerReady(ArenaPlayerReadyEvent event){
 		if (!Defaults.ENABLE_PLAYER_READY_BLOCK){
 			return;}
 		int tcount = 0;
+		int pcount = 0;
 		for (ArenaTeam t: teams){
-			if (!t.isReady())
+			if (!t.isReady() && t.size() > 0)
 				return;
-			if (t.size() > 0)
-				tcount++;
+			tcount++;
+			pcount+= t.size();
 		}
-		if (tcount < neededTeams)
+		if (tcount < params.getMinTeams() || pcount < params.getMinPlayers())
 			return;
-		this.start();
+		callEvent(new MatchPlayersReadyEvent(this));
 	}
 
 	public static void setDisabledCommands(List<String> commands) {
 		for (String s: commands){
 			disabledCommands.add("/" + s.toLowerCase());}
 	}
+
 }

@@ -11,9 +11,11 @@ import mc.alk.arena.BattleArena;
 import mc.alk.arena.Defaults;
 import mc.alk.arena.competition.match.Match;
 import mc.alk.arena.controllers.ArenaClassController;
+import mc.alk.arena.controllers.LobbyController;
 import mc.alk.arena.controllers.MethodController;
 import mc.alk.arena.controllers.ParamController;
 import mc.alk.arena.controllers.TeleportController;
+import mc.alk.arena.controllers.containers.LobbyContainer;
 import mc.alk.arena.listeners.custom.BukkitEventHandler;
 import mc.alk.arena.listeners.custom.RListener;
 import mc.alk.arena.objects.ArenaClass;
@@ -63,6 +65,8 @@ public class BattleArenaDebugExecutor extends CustomCommandExecutor{
 //			Defaults.DEBUG_DAMAGE = on;
 		} else if(section.equalsIgnoreCase("commands")){
 			Defaults.DEBUG_COMMANDS = on;
+		} else if(section.equalsIgnoreCase("debug")){
+			Log.setDebug(on);
 		} else if(section.equalsIgnoreCase("teams")){
 			Defaults.DEBUG_MATCH_TEAMS = on;
 		} else {
@@ -196,6 +200,21 @@ public class BattleArenaDebugExecutor extends CustomCommandExecutor{
 		if (m == null){
 			return sendMessage(sender, "&cMatch not currently running in arena " + arena.getName());}
 		ReflectionToStringBuilder rtsb = new ReflectionToStringBuilder(m, ToStringStyle.MULTI_LINE_STYLE);
+		return sendMessage(sender, rtsb.toString());
+	}
+
+	@MCCommand(cmds={"showLobbyVars"}, admin=true)
+	public boolean showLobbyVars(CommandSender sender, String arenatype) {
+		ArenaType type = ArenaType.fromString(arenatype);
+		if (type == null){
+			return sendMessage(sender, "&cArenaType not found &6" + arenatype);}
+
+		LobbyContainer lobby = LobbyController.getLobby(type);
+		if (lobby == null){
+			return sendMessage(sender, "&cThere is no lobby for &6" + type.getName());}
+		ReflectionToStringBuilder rtsb = new ReflectionToStringBuilder(lobby, ToStringStyle.MULTI_LINE_STYLE);
+		sendMessage(sender, rtsb.toString());
+		rtsb = new ReflectionToStringBuilder(lobby.getParams().getTransitionOptions(), ToStringStyle.MULTI_LINE_STYLE);
 		return sendMessage(sender, rtsb.toString());
 	}
 
@@ -383,7 +402,7 @@ public class BattleArenaDebugExecutor extends CustomCommandExecutor{
 		ArenaClass ac = ArenaClassController.getClass(className);
 		if (ac == null)
 			return sendMessage(sender, "&cArena class " + className +" doesn't exist");
-		ArenaClassController.giveClass(player, ac);
+		ArenaClassController.giveClass(BattleArena.toArenaPlayer(player), ac);
 		return sendMessage(sender, "&2Arena class " + ac.getDisplayName() +"&2 given to &6" + player.getName());
 	}
 

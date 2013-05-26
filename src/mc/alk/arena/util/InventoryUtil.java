@@ -7,21 +7,23 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import mc.alk.arena.Defaults;
 import mc.alk.arena.util.compat.IInventoryHelper;
 
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
-//import org.bukkit.inventory.meta.LeatherArmorMeta;
 
 public class InventoryUtil {
 	static final String version = "BA InventoryUtil 2.1.6";
@@ -29,6 +31,7 @@ public class InventoryUtil {
 	static IInventoryHelper handler = null;
 
 	static {
+		Class<?>[] args = {};
 		try {
 			final String pkg = Bukkit.getServer().getClass().getPackage().getName();
 			String version = pkg.substring(pkg.lastIndexOf('.') + 1);
@@ -38,9 +41,15 @@ public class InventoryUtil {
 			} else{
 				clazz = Class.forName("mc.alk.arena.util.compat.post.InventoryHelper");
 			}
-			Class<?>[] args = {};
+
 			handler = (IInventoryHelper) clazz.getConstructor(args).newInstance((Object[])args);
 		} catch (Exception e) {
+			try{
+				final Class<?> clazz = Class.forName("mc.alk.arena.util.compat.pre.InventoryHelper");
+				handler = (IInventoryHelper) clazz.getConstructor(args).newInstance((Object[])args);
+			} catch (Exception e2){
+				e2.printStackTrace();
+			}
 			e.printStackTrace();
 		}
 	}
@@ -233,38 +242,38 @@ public class InventoryUtil {
 
 	/**
 	 * Return a item stack from a given string
-	 * @param name
+	 * @param itemStr
 	 * @return
 	 */
-	public static ItemStack getItemStack(String name) {
-		if (name == null || name.isEmpty())
+	public static ItemStack getItemStack(String itemStr) {
+		if (itemStr == null || itemStr.isEmpty())
 			return null;
-		name = name.replace(" ", "_");
-		name = name.replace(";", ":");
-		name = name.toLowerCase();
+		itemStr = itemStr.replace(" ", "_");
+		itemStr = itemStr.replace(";", ":");
+		itemStr = itemStr.toLowerCase();
 
-		String split[] = name.split(":");
+		String split[] = itemStr.split(":");
 		short dataValue = 0;
 		if (split.length > 1){
 			if (isInt(split[1])){
 				int i = Integer.valueOf(split[1]);
 				dataValue = (short) i;
-				name = split[0];
+				itemStr = split[0];
 			}
 		}
-		Material mat = Material.matchMaterial(name);
-		if (DEBUG) System.out.println(mat +"   " + name +"   " + dataValue);
+		Material mat = Material.matchMaterial(itemStr);
+		if (DEBUG) System.out.println(mat +"   " + itemStr +"   " + dataValue);
 		if (mat != null && mat != Material.AIR) {
 			return new ItemStack(mat.getId(), 1, dataValue);
 		}
-		name = name.toUpperCase();
+		itemStr = itemStr.toUpperCase();
 		for (Material m : Material.values()){
 			String itemName = m.name();
 			//        		ItemStack item = commonToStack.get(itemName);
-			int index = itemName.indexOf(name,0);
+			int index = itemName.indexOf(itemStr,0);
 			//			if (DEBUG) System.out.println(index +"   " + itemName +"   " + m);
 			if (index != -1 && index == 0){
-				if (DEBUG) System.out.println(m +"   " + name +"   " + dataValue);
+				if (DEBUG) System.out.println(m +"   " + itemStr +"   " + dataValue);
 				return new ItemStack(m.getId(), 1, dataValue);
 			}
 		}
@@ -322,12 +331,10 @@ public class InventoryUtil {
 		PlayerInventory inv = p.getInventory();
 		for (ItemStack is : inv.getContents()){
 			if (is != null && is.getType() != Material.AIR){
-				//				System.out.println("item=" + is);
 				return true;}
 		}
 		for (ItemStack is : inv.getArmorContents()){
 			if (is != null && is.getType() != Material.AIR){
-				//				System.out.println("item=" + is);
 				return true;}
 		}
 		return false;
@@ -542,7 +549,7 @@ public class InventoryUtil {
 		}
 		if(maxStackSize != 64){
 			ArrayList<ItemStack> items = new ArrayList<ItemStack>();
-			for (int i = 0; i < Math.ceil(left / maxStackSize); i++) {
+			for (int i = 0; i < Math.ceil((double)left / maxStackSize); i++) {
 				if (left < maxStackSize) {
 					is2.setAmount(left);
 					items.add(is2);
@@ -628,33 +635,107 @@ public class InventoryUtil {
 		}
 	}
 
+	//Netherfoam start
+	private static final Pattern LORE_PATTERN = Pattern.compile("lore= ?\"(.*)\""); //The pattern for matching lore
+	private static final Pattern COLOR_PATTERN = Pattern.compile("color= ?([0-9]+),([0-9]+),([0-9]+)"); //The pattern for matching lore
+
 	public static ItemStack parseItem(String str) throws Exception{
+		/// items in yaml get stored like this {leather_chest=fireprot:5 1}
+		/// so need to remove the {} and the first '='
+		if (str.contains("{"))
+			str = str.replaceFirst("=", " ");
 		str = str.replaceAll("[}{]", "");
-		str = str.replaceAll("=", " ");
+
 		if (DEBUG) System.out.println("item=" + str);
+
+		/// Parse Lore (thanks to Netherfoam)
+		List<String> lore = parseLore(str);
+		if(lore != null){ //We have lore, so strip it.
+			str = LORE_PATTERN.matcher(str).replaceFirst("");}
+		Color c = parseColor(str);
+		if (c != null){ /// we have color, so strip it
+			str = COLOR_PATTERN.matcher(str).replaceFirst("");}
+
 		ItemStack is =null;
 		try{
 			String split[] = str.split(" ");
 			is = InventoryUtil.getItemStack(split[0].trim());
 			if (is == null)
 				return null;
-			final int amt = split.length > 1 ? Integer.valueOf(split[split.length -1]) : 1;
+			int amt;
+			if (split.length > 1){
+				try {
+					amt = Integer.valueOf(split[split.length-1]);
+				} catch (Exception e){
+					amt = 1;
+				}
+			} else {
+				amt = 1;
+			}
 			is.setAmount(amt);
+			if (lore != null && !lore.isEmpty())
+				handler.setLore(is,lore);
+			if (c!=null)
+				handler.setItemColor(is, c);
+
 			for (int i = 1; i < split.length-1;i++){
 				EnchantmentWithLevel ewl = getEnchantment(split[i].trim());
+				if (ewl == null){
+					throw new IllegalArgumentException(" enchantment " + split[i].trim() +" does not exist");
+				}
 				try {
 					is.addUnsafeEnchantment(ewl.e, ewl.lvl);
 				} catch (IllegalArgumentException iae){
-					Logger.getLogger("minecraft").warning(ewl+" can not be applied to the item " + str);
+					Log.warn(ewl+" can not be applied to the item " + str);
 				}
 			}
 		} catch(Exception e){
 			e.printStackTrace();
-			Logger.getLogger("minecraft").severe("Couldnt parse item=" + str);
-			throw new Exception("parse item was bad");
+			Log.err(e.getMessage());
+			throw new Exception("[BA error] Coudln't parse item="+str);
 		}
 		return is;
 	}
+
+	public static Color parseColor(String str){
+		Matcher m = COLOR_PATTERN.matcher(str);
+		if (!m.find())
+			return null;
+		return new Color(Integer.valueOf(m.group(1)),Integer.valueOf(m.group(2)),Integer.valueOf(m.group(3)));
+	}
+
+	//Netherfoam start
+	public static LinkedList<String> parseLore(String str){
+		try{
+			Matcher matcher = LORE_PATTERN.matcher(str);
+			if(matcher.find()){
+				int start = matcher.start(); //This only takes the first match
+				int end = matcher.end();
+
+				//Remove the "Lore: " part
+				//Remove the quotes
+				//Possible issue: If you want quotes in your lore...?
+				String part = str.substring(start, end).replaceFirst("lore[:=] ?", "").replaceAll("\"", ""); //Strip Lore: and quotes.
+				//Replace color codes
+				part = ChatColor.translateAlternateColorCodes('&', matcher.group(1));
+				//Now we can split it.
+				String[] lines = part.split("[;\\n]");
+				//DEBUG
+				if(DEBUG) System.out.println(Arrays.toString(lines));
+				//Create a new list
+				LinkedList<String> lore = new LinkedList<String>();
+				//Add all the sections to the list
+				for(String s : lines) lore.add(s);
+				//Success!
+				return lore;
+			}
+		}
+		catch(Exception e){
+			e.printStackTrace(); //Damn.
+		}
+		return null;
+	}
+	//Netherfoam end
 
 	public static EnchantmentWithLevel getEnchantment(String str) {
 		if (str.equalsIgnoreCase("all")){
@@ -723,7 +804,12 @@ public class InventoryUtil {
 	 */
 	public static String getItemString(ItemStack is) {
 		StringBuilder sb = new StringBuilder();
-		sb.append(is.getType().toString() +":"+is.getDurability()+" ");
+		if (is.getDurability() > 0){
+			sb.append(is.getType().toString() +":"+is.getDurability()+" ");
+		} else {
+			sb.append(is.getType().toString() +" ");
+		}
+
 		Map<Enchantment,Integer> encs = is.getEnchantments();
 		for (Enchantment enc : encs.keySet()){
 			sb.append(enc.getName() + ":" + encs.get(enc)+" ");

@@ -74,7 +74,7 @@ public class BattleArena extends JavaPlugin {
 	static private String version;
 	static private BattleArena plugin;
 
-	private final static BattleArenaController arenaController = new BattleArenaController();
+	private static BattleArenaController arenaController;
 	static BAEventController eventController;
 	private final static TeamController tc = TeamController.INSTANCE;
 	private final static EventController ec = new EventController();
@@ -95,15 +95,16 @@ public class BattleArena extends JavaPlugin {
 
 	@Override
 	public void onEnable() {
-		plugin = this;
+		BattleArena.plugin = this;
 		PluginDescriptionFile pdfFile = this.getDescription();
-		pluginname = pdfFile.getName();
-		version = pdfFile.getVersion();
+		BattleArena.pluginname = pdfFile.getName();
+		BattleArena.version = pdfFile.getVersion();
 		Class<?> clazz = this.getClass();
 		ConsoleCommandSender sender = Bukkit.getConsoleSender();
 		MessageUtil.sendMessage(sender,"&4["+pluginname+"] &6v"+version+"&f enabling!");
 
 		BukkitInterface.setServer(Bukkit.getServer()); /// Set the server
+		arenaController = new BattleArenaController(signController);
 
 		/// Create our plugin folder if its not there
 		File dir = getDataFolder();
@@ -112,6 +113,7 @@ public class BattleArena extends JavaPlugin {
 		FileUpdater.makeIfNotExists(new File(dir+"/messages"));
 		FileUpdater.makeIfNotExists(new File(dir+"/saves"));
 		FileUpdater.makeIfNotExists(new File(dir+"/modules"));
+
 		/// For potential updates to default yml files
 		YamlFileUpdater yfu = new YamlFileUpdater(this);
 
@@ -219,7 +221,7 @@ public class BattleArena extends JavaPlugin {
 		if (Defaults.AUTO_UPDATE)
 			PluginUpdater.downloadPluginUpdates(this);
 
-		MessageUtil.sendMessage(sender,"&4["+pluginname+"] &6v"+version+"&f enabled!");
+		MessageUtil.sendMessage(sender,"&4["+pluginname+"] &6v"+BattleArena.version+"&f enabled!");
 	}
 
 	private void createMessageSerializers() {
@@ -247,6 +249,7 @@ public class BattleArena extends JavaPlugin {
 		arenaControllerSerializer.save();
 		eventSchedulerSerializer.saveScheduledEvents();
 		signSerializer.saveAll(signController);
+
 		if (Defaults.AUTO_UPDATE)
 			PluginUpdater.updatePlugin(this);
 		FileLogger.saveAll();
@@ -351,7 +354,7 @@ public class BattleArena extends JavaPlugin {
 	 * @return
 	 */
 	public static String getNameAndVersion() {
-		return "[" + pluginname + " v" + version +"]";
+		return "[" + BattleArena.pluginname + " v" + BattleArena.version +"]";
 	}
 
 	/**
@@ -359,7 +362,7 @@ public class BattleArena extends JavaPlugin {
 	 * @return
 	 */
 	public static String getPluginName() {
-		return "[" + pluginname+"]";
+		return "[" + BattleArena.pluginname+"]";
 	}
 
 	/**

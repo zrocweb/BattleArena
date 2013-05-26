@@ -18,10 +18,13 @@ import mc.alk.arena.controllers.ArenaAlterController;
 import mc.alk.arena.controllers.BAEventController;
 import mc.alk.arena.controllers.CompetitionController;
 import mc.alk.arena.controllers.DuelController;
+import mc.alk.arena.controllers.EssentialsController;
 import mc.alk.arena.controllers.EventController;
 import mc.alk.arena.controllers.HeroesController;
+import mc.alk.arena.controllers.LobbyController;
 import mc.alk.arena.controllers.MobArenaInterface;
 import mc.alk.arena.controllers.MoneyController;
+import mc.alk.arena.controllers.ParamAlterController;
 import mc.alk.arena.controllers.ParamController;
 import mc.alk.arena.controllers.PlayerController;
 import mc.alk.arena.controllers.StatController;
@@ -30,6 +33,7 @@ import mc.alk.arena.controllers.TeleportController;
 import mc.alk.arena.controllers.messaging.MessageHandler;
 import mc.alk.arena.events.arenas.ArenaCreateEvent;
 import mc.alk.arena.events.arenas.ArenaDeleteEvent;
+import mc.alk.arena.events.players.ArenaPlayerLeaveEvent;
 import mc.alk.arena.objects.ArenaParams;
 import mc.alk.arena.objects.ArenaPlayer;
 import mc.alk.arena.objects.CompetitionSize;
@@ -47,6 +51,7 @@ import mc.alk.arena.objects.options.DuelOptions;
 import mc.alk.arena.objects.options.DuelOptions.DuelOption;
 import mc.alk.arena.objects.options.JoinOptions;
 import mc.alk.arena.objects.options.JoinOptions.JoinOption;
+import mc.alk.arena.objects.options.TransitionOption;
 import mc.alk.arena.objects.options.TransitionOptions;
 import mc.alk.arena.objects.pairs.ParamTeamPair;
 import mc.alk.arena.objects.pairs.QueueResult;
@@ -58,6 +63,7 @@ import mc.alk.arena.objects.teams.FormingTeam;
 import mc.alk.arena.util.Log;
 import mc.alk.arena.util.MessageUtil;
 import mc.alk.arena.util.MinMax;
+import mc.alk.arena.util.NotifierUtil;
 import mc.alk.arena.util.ServerUtil;
 import mc.alk.arena.util.TimeUtil;
 
@@ -165,7 +171,7 @@ public class BAExecutor extends CustomCommandExecutor {
 			t = TeamController.createTeam(player);}
 
 		if (!canJoin(t,true)){
-			sendSystemMessage(player, "teammate_cant_join");
+			sendSystemMessage(player, "teammate_cant_join",mp.getName());
 			return sendMessage(player,"&6/team leave: &cto leave the team");
 		}
 
@@ -213,7 +219,11 @@ public class BAExecutor extends CustomCommandExecutor {
 		/// Make sure we have Match Options
 		final MatchTransitions ops = mp.getTransitionOptions();
 		if (ops == null){
-			return sendMessage(player,"&cThis match type has no valid options, contact an admin to fix ");}
+			return sendMessage(player,"&cThis match type has no valid options, contact an admin to fix");}
+
+		/// Check for lobbies
+		if (ops.hasAnyOption(TransitionOption.TELEPORTLOBBY) && !LobbyController.hasLobby(mp.getType())){
+			return sendMessage(player,"&cThis match has no lobby and needs one! contact an admin to fix");}
 
 		/// Check if the team is ready
 		if(!ops.teamReady(t,null)){
@@ -229,19 +239,38 @@ public class BAExecutor extends CustomCommandExecutor {
 		AnnouncementOptions ao = mp.getAnnouncementOptions();
 		Channel channel = null;
 		String sysmsg = null;
+		{
+			ao = mp.getAnnouncementOptions();
+			channel = ao != null ? ao.getChannel(true, MatchState.ONENTERQUEUE) :
+				AnnouncementOptions.getDefaultChannel(true,MatchState.ONENTERQUEUE);
+			sysmsg = MessageHandler.getSystemMessage("match_starts_when_time",mp.getSecondsTillMatch());
+			NotifierUtil.notify("msgs", "  ao = " + ao +"   sysmsg=" + sysmsg +"   channel="+ channel +"   team size= " + t.size());
+			if (ao != null){
+				NotifierUtil.notify("msgs", "  channel = " + ao.getChannel(true, MatchState.ONENTERQUEUE));
+			} else {
+				NotifierUtil.notify("msgs", "  channel = " +
+						AnnouncementOptions.getDefaultChannel(true, MatchState.ONENTERQUEUE));
+			}
+		}
 		/// Add them to the queue
-		QueueResult qpp = ac.addToQue(tqo);
+		QueueResult qpp = ac.wantsToJoin(tqo);
+
+		/// Annouce to the server if they have the option set
+		ao = mp.getAnnouncementOptions();
+		channel = ao != null ? ao.getChannel(true, MatchState.ONENTERQUEUE) :
+			AnnouncementOptions.getDefaultChannel(true,MatchState.ONENTERQUEUE);
+		String neededPlayers = qpp.neededPlayers == CompetitionSize.MAX ? "inf" : qpp.neededPlayers+"";
+		channel.broadcast(MessageHandler.getSystemMessage("server_joined_the_queue",
+				mp.getPrefix(),player.getDisplayName(),qpp.playersInQueue,neededPlayers));
+
 		switch(qpp.status){
+
 		case ADDED_TO_EXISTING_MATCH:
 			if (t.size() == 1){
 				t.sendMessage(MessageHandler.getSystemMessage("you_joined_event", mp.getName()));
 			} else {
 				t.sendMessage(MessageHandler.getSystemMessage("you_added_to_team"));
 			}
-			/// Annouce to the server if they have the option set
-			ao = mp.getAnnouncementOptions();
-			channel = ao != null ? ao.getChannel(true, MatchState.ONENTERQUEUE) :
-				AnnouncementOptions.getDefaultChannel(true,MatchState.ONENTERQUEUE);
 			sysmsg = MessageHandler.getSystemMessage("match_starts_when_time",mp.getSecondsTillMatch());
 			t.sendMessage(sysmsg);
 			break;
@@ -255,43 +284,38 @@ public class BAExecutor extends CustomCommandExecutor {
 			t.sendMessage(MessageHandler.getSystemMessage("you_start_when_free"));
 			break;
 		case ADDED_TO_QUEUE:
-			/// Annouce to the server if they have the option set
-			ao = mp.getAnnouncementOptions();
-			channel = ao != null ? ao.getChannel(true, MatchState.ONENTERQUEUE) :
-				AnnouncementOptions.getDefaultChannel(true,MatchState.ONENTERQUEUE);
-
-			String neededPlayers = qpp.neededPlayers == CompetitionSize.MAX ? "inf" : qpp.neededPlayers+"";
-			channel.broadcast(MessageHandler.getSystemMessage("server_joined_the_queue",
-					mp.getPrefix(),player.getDisplayName(),qpp.playersInQueue,neededPlayers));
 			sysmsg = MessageHandler.getSystemMessage("joined_the_queue",
 					mp.toPrettyString(),qpp.pos, neededPlayers);
+
 			StringBuilder msg = new StringBuilder(sysmsg != null ?
 					sysmsg : "&eYou joined the &6%s&e queue.");
 			if (qpp.neededPlayers != CompetitionSize.MAX){
 				String posmsg = MessageHandler.getSystemMessage("position_in_queue",qpp.pos, neededPlayers);
 				msg.append( posmsg != null ? posmsg : "");
 			}
-
-			switch(qpp.timeStatus){
-			case CANT_FORCESTART:
-				break;
-			case TIME_ONGOING:
-				Long time = qpp.time - System.currentTimeMillis();
-				if (qpp.neededPlayers != CompetitionSize.MAX){
-					msg.append("\n"+MessageHandler.getSystemMessage("match_starts_players_or_time",
-							qpp.neededPlayers-qpp.pos, TimeUtil.convertMillisToString(time),
-							qpp.params.getMinPlayers()));
-				} else {
-					msg.append("\n"+MessageHandler.getSystemMessage("match_starts_when_time",
-							TimeUtil.convertMillisToString(time)));
+			if (qpp.time != null){
+				switch(qpp.timeStatus){
+				case CANT_FORCESTART:
+					break;
+				case TIME_ONGOING:
+					Long time = qpp.time - System.currentTimeMillis();
+					if (qpp.neededPlayers != CompetitionSize.MAX){
+						msg.append("\n"+MessageHandler.getSystemMessage("match_starts_players_or_time",
+								qpp.neededPlayers-qpp.pos, TimeUtil.convertMillisToString(time),
+								qpp.params.getMinPlayers()));
+					} else {
+						msg.append("\n"+MessageHandler.getSystemMessage("match_starts_when_time",
+								TimeUtil.convertMillisToString(time)));
+					}
+					break;
+				case TIME_EXPIRED:
+					msg.append("\n"+MessageHandler.getSystemMessage("you_start_when_free_pos", qpp.pos));
+					break;
+				default:
+					break;
 				}
-				break;
-			case TIME_EXPIRED:
-				msg.append("\n"+MessageHandler.getSystemMessage("you_start_when_free_pos", qpp.pos));
-				break;
-			default:
-				break;
 			}
+
 			t.sendMessage(msg.toString());
 			break;
 		default:
@@ -326,60 +350,70 @@ public class BAExecutor extends CustomCommandExecutor {
 	}
 
 	public boolean leave(ArenaPlayer p, MatchParams mp, boolean adminLeave) {
-//		/// Check Perms
-//		if (!adminLeave && !hasMPPerm(p,mp,"join")){
-//			return sendSystemMessage(p,"no_join_perms", mp.getCommand());}
-
 		if (!canLeave(p)){
 			return true;}
-		boolean foundComp = false;
-		Competition comp = null;
-		while ((comp = p.getCompetition()) != null){
-			p.removeCompetition(comp);
-			foundComp=true;
-			if (comp.leave(p)){
-				sendSystemMessage(p,"you_left_competition",comp.getName());}
-		}
-		if (foundComp)
-			return true;
 
-		comp = ac.getMatch(p);
-		if (comp != null){
-			comp.leave(p);
-			return sendSystemMessage(p,"you_left_competition",comp.getName());
-		}
+		boolean inSystem = false;
+		try{
+			Competition comp = null;
+			while ((comp = p.getCompetition()) != null){
+				p.removeCompetition(comp);
+				inSystem=true;
+				if (comp.leave(p)){
+					sendSystemMessage(p,"you_left_competition",comp.getName());}
+				if (comp.getParams().hasLobby()){
+					LobbyController.leaveLobby(comp.getParams(), p);}
+			}
 
-		comp = insideEvent(p);
-		if (comp != null){
-			comp.leave(p);
-			return sendSystemMessage(p,"you_left_competition", comp.getName());
-		}
+			if (inSystem){
+				return true;
+			}
 
-		/// Are they even in a queue?
-		if(!(ac.isInQue(p))){
-			ArenaTeam t = TeamController.getTeam(p);
-			QueueObject qo = ac.getQueueObject(p);
-			if (t != null && qo != null){
-				TeamController.removeTeamHandlers(t);
-				return sendSystemMessage(p,"you_left_queue",qo.getMatchParams().getName());
+			comp = ac.getMatch(p);
+			if (comp != null){
+				inSystem = true;
+				comp.leave(p);
+				return sendSystemMessage(p,"you_left_competition",comp.getName());
+			}
+
+			comp = insideEvent(p);
+			if (comp != null){
+				inSystem = true;
+				comp.leave(p);
+				return sendSystemMessage(p,"you_left_competition", comp.getName());
+			}
+
+			/// Are they even in a queue?
+			if(!(ac.isInQue(p))){
+				ArenaTeam t = TeamController.getTeam(p);
+				QueueObject qo = ac.getQueueObject(p);
+				if (t != null && qo != null){
+					inSystem = true;
+					TeamController.removeTeamHandlers(t);
+					return sendSystemMessage(p,"you_left_queue",qo.getMatchParams().getName());
+				} else {
+					return sendSystemMessage(p,"you_not_in_queue");
+				}
+			}
+			ParamTeamPair qtp = null;
+			ArenaTeam t = teamc.getSelfFormedTeam(p); /// They are in the queue, they are part of a team
+			if (t != null)
+				qtp = ac.removeFromQue(t);
+			else
+				qtp = ac.removeFromQue(p);
+			if (qtp!= null && t!= null && t.size() > 1){
+				inSystem = true;
+				t.sendMessage(MessageHandler.getSystemMessage("team_left_queue", qtp.q.getName(), p.getName()));
+			} else if (qtp != null){
+				inSystem = true;
+				sendSystemMessage(p,"you_left_queue",qtp.q.getName());
 			} else {
 				return sendSystemMessage(p,"you_not_in_queue");
 			}
+			refundFee(qtp.q, qtp.team);
+		} finally {
+			new ArenaPlayerLeaveEvent(p,p.getTeam()).callEvent();
 		}
-		ParamTeamPair qtp = null;
-		ArenaTeam t = teamc.getSelfFormedTeam(p); /// They are in the queue, they are part of a team
-		if (t != null)
-			qtp = ac.removeFromQue(t);
-		else
-			qtp = ac.removeFromQue(p);
-		if (qtp!= null && t!= null && t.size() > 1){
-			t.sendMessage(MessageHandler.getSystemMessage("team_left_queue", qtp.q.getName(), p.getName()));
-		} else if (qtp != null){
-			sendSystemMessage(p,"you_left_queue",qtp.q.getName());
-		} else {
-			return sendSystemMessage(p,"you_not_in_queue");
-		}
-		refundFee(qtp.q, qtp.team);
 		return true;
 	}
 
@@ -422,9 +456,12 @@ public class BAExecutor extends CustomCommandExecutor {
 	}
 
 	private boolean cancelAll(CommandSender sender) {
-		ac.purgeQueue();
+		Collection<ArenaTeam> teams = ac.purgeQueue();
+		for (ArenaTeam t: teams){
+			t.sendMessage("&cYou have been removed from the queue");}
 		ac.cancelAllArenas();
 		ec.cancelAll();
+		LobbyController.cancelAll();
 		TeamController.removeAllHandlers();
 		return sendMessage(sender,"&2You have cancelled all matches/events and cleared the queue");
 	}
@@ -483,7 +520,7 @@ public class BAExecutor extends CustomCommandExecutor {
 	@MCCommand(cmds={"rank"}, helpOrder=3)
 	public boolean rank(Player sender,MatchParams mp) {
 		if (!StatController.hasInterface(mp)){
-			return sendMessage(sender,"&eThere is no tracking for " +mp.toPrettyString());}
+			return sendMessage(sender,"&cThere is no tracking for &6" +mp.toPrettyString());}
 		StatController sc = new StatController(mp);
 		String rankMsg = sc.getRankMessage(sender);
 		return MessageUtil.sendMessage(sender, rankMsg);
@@ -492,7 +529,7 @@ public class BAExecutor extends CustomCommandExecutor {
 	@MCCommand(cmds={"rank"}, helpOrder=4)
 	public boolean rankOther(CommandSender sender,MatchParams mp, OfflinePlayer player) {
 		if (!StatController.hasInterface(mp)){
-			return sendMessage(sender,"&eThere is no tracking for " +mp.toPrettyString());}
+			return sendMessage(sender,"&cThere is no tracking for " +mp.toPrettyString());}
 		StatController sc = new StatController(mp);
 		String rankMsg = sc.getRankMessage(player);
 		return MessageUtil.sendMessage(sender, rankMsg);
@@ -585,7 +622,7 @@ public class BAExecutor extends CustomCommandExecutor {
 		return sendMessage(sender, info);
 	}
 
-	@MCCommand(cmds={"info"}, op=true, usage="info <arenaname>", order=1, helpOrder=6)
+	@MCCommand(cmds={"info"}, admin=true, usage="info <arenaname>", order=1, helpOrder=6)
 	public boolean info(CommandSender sender, Arena arena) {
 		sendMessage(sender, arena.toDetailedString());
 		Match match = ac.getMatch(arena);
@@ -646,15 +683,13 @@ public class BAExecutor extends CustomCommandExecutor {
 
 	@MCCommand(cmds={"create"}, admin=true, perm="arena.create",
 			usage="create <arena name> [team size] [# teams]")
-	public boolean arenaCreate(CommandSender sender, MatchParams mp, String name, String[] args) {
+	public boolean arenaCreate(Player sender, MatchParams mp, String name, String[] args) {
 		if (Defaults.DEBUG) for (int i =0;i<args.length;i++){System.out.println("args=" + i + "   " + args[i]);}
 
 		if (ac.getArena(name) != null){
 			return sendMessage(sender, "&cThere is already an arena named &6"+name);}
 		if (ParamController.getMatchParams(name) != null){
 			return sendMessage(sender, "&cYou can't choose an arena type as an arena name");}
-
-		Player p = (Player) sender;
 
 		ArenaParams ap = new ArenaParams(mp.getType());
 		try{
@@ -667,7 +702,10 @@ public class BAExecutor extends CustomCommandExecutor {
 		}
 
 		Arena arena = ArenaType.createArena(name, ap,false);
-		arena.setSpawnLoc(0, p.getLocation());
+		if (arena == null){
+			return sendMessage(sender,"&cCouldn't create the arena "+name +" of type " + ap.getType());}
+
+		arena.setSpawnLoc(0, sender.getLocation());
 		ac.addArena(arena);
 		ArenaControllerInterface aci = new ArenaControllerInterface(arena);
 		aci.create();
@@ -682,8 +720,21 @@ public class BAExecutor extends CustomCommandExecutor {
 	}
 
 	@MCCommand(cmds={"alter"}, admin=true, perm="arena.alter")
-	public boolean arenaAlter(CommandSender sender, Arena arena, String[] args) {
-		ArenaAlterController.alterArena(sender, arena, args);
+	public boolean arenaAlter(CommandSender sender, MatchParams params, Arena arena, String[] args) {
+		ArenaAlterController.alterArena(sender, params, arena, args);
+		return true;
+	}
+
+	@MCCommand(cmds={"setoption","so"}, admin=true, perm="arena.alter")
+	public boolean gameAlter(CommandSender sender, MatchParams params, String[] args) {
+		ParamAlterController pac = new ParamAlterController(params);
+		pac.setOption(sender, args);
+		return true;
+	}
+
+	@MCCommand(cmds={"addLobby","al"}, admin=true, perm="arena.alter")
+	public boolean addLobby(Player sender, MatchParams params, String[] args) {
+		ArenaAlterController.alterLobby(sender,params, args);
 		return true;
 	}
 
@@ -1023,7 +1074,6 @@ public class BAExecutor extends CustomCommandExecutor {
 			}
 		}
 
-
 		if (dc.hasChallenger(player)){
 			if (showMessages) sendMessage(player,"&cYou need to rescind your challenge first! &6/arena rescind");
 			return false;
@@ -1033,7 +1083,10 @@ public class BAExecutor extends CustomCommandExecutor {
 			if (showMessages) sendMessage(player,"&cYou need to leave first.  &6/arena leave");
 			return false;
 		}
-
+		if (EssentialsController.enabled() && EssentialsController.inJail(player)){
+			if (showMessages) sendMessage(player,"&cYou are still in jail!");
+			return false;
+		}
 		return true;
 	}
 	public Event insideEvent(ArenaPlayer p) {

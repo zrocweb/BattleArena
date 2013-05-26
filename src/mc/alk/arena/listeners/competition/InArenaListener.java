@@ -7,9 +7,9 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import mc.alk.arena.BattleArena;
-import mc.alk.arena.events.players.ArenaPlayerEnterEvent;
+import mc.alk.arena.events.players.ArenaPlayerEnterMatchEvent;
 import mc.alk.arena.events.players.ArenaPlayerEnterQueueEvent;
-import mc.alk.arena.events.players.ArenaPlayerLeaveEvent;
+import mc.alk.arena.events.players.ArenaPlayerLeaveMatchEvent;
 import mc.alk.arena.events.players.ArenaPlayerLeaveQueueEvent;
 
 import org.bukkit.Bukkit;
@@ -26,12 +26,13 @@ public enum InArenaListener implements Listener {
 	boolean registered = false;
 
 	private InArenaListener(){
-		Bukkit.getPluginManager().registerEvents(this, BattleArena.getSelf());
+		if (BattleArena.getSelf().isEnabled())
+			Bukkit.getPluginManager().registerEvents(this, BattleArena.getSelf());
 	}
 
 	@EventHandler
 	public void onArenaPlayerEnterQueueEvent(ArenaPlayerEnterQueueEvent event){
-		if (qplayers.isEmpty() && players.isEmpty()){
+		if (!registered && BattleArena.getSelf().isEnabled()){
 			registered = true;
 			for (Listener l: listeners){
 				Bukkit.getPluginManager().registerEvents(l, BattleArena.getSelf());
@@ -51,8 +52,8 @@ public enum InArenaListener implements Listener {
 	}
 
 	@EventHandler
-	public void onArenaPlayerEnterEvent(ArenaPlayerEnterEvent event){
-		if (players.isEmpty() && qplayers.isEmpty()){
+	public void onArenaPlayerEnterEvent(ArenaPlayerEnterMatchEvent event){
+		if (!registered){
 			registered = true;
 			for (Listener l: listeners){
 				Bukkit.getPluginManager().registerEvents(l, BattleArena.getSelf());
@@ -62,7 +63,7 @@ public enum InArenaListener implements Listener {
 	}
 
 	@EventHandler
-	public void onArenaPlayerLeaveEvent(ArenaPlayerLeaveEvent event){
+	public void onArenaPlayerLeaveEvent(ArenaPlayerLeaveMatchEvent event){
 		if (players.remove(event.getPlayer().getName()) && players.isEmpty()){
 			registered = false;
 			for (Listener l: listeners){

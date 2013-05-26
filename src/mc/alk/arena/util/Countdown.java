@@ -24,18 +24,17 @@ public class Countdown implements Runnable{
 	Integer timerId;
 	Plugin plugin;
 
-	public Countdown(final Plugin plugin, int seconds, int interval, CountdownCallback callback){
-		this.interval = interval;
+	public Countdown(final Plugin plugin, Integer seconds, Integer interval, CountdownCallback callback){
+		this.interval = interval == null || interval <= 0 ? seconds : interval;
 		this.callback = callback;
 		this.plugin = plugin;
-		final int rem = seconds % interval;
+		final int rem = seconds % this.interval;
 		/// Lets get rid of the remainder first, so that the rest of the events
 		/// are a multiple of the timeInterval
-		final long time = (rem != 0? rem : interval) * 20L;
-		this.seconds = seconds - (rem != 0? rem : interval);
+		final long time = (rem != 0? rem : this.interval) * 20L;
+		this.seconds = seconds - (rem != 0? rem : this.interval);
 		startTime = System.currentTimeMillis();
 		expectedEndTime = startTime + seconds*1000;
-
 		this.timerId  = plugin.getServer().getScheduler().scheduleSyncDelayedTask(plugin, this,
 				(long)(time * Defaults.TICK_MULT));
 	}

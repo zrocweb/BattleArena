@@ -1,9 +1,11 @@
 package mc.alk.arena.objects;
 
+import java.util.List;
 import java.util.Stack;
 
 import mc.alk.arena.competition.Competition;
 import mc.alk.arena.controllers.HeroesController;
+import mc.alk.arena.objects.spawns.SpawnInstance;
 import mc.alk.arena.objects.teams.ArenaTeam;
 import mc.alk.arena.util.PermissionsUtil;
 import mc.alk.arena.util.PlayerUtil;
@@ -26,11 +28,23 @@ public class ArenaPlayer {
 	 * Which competitions is the player inside
 	 * This can be up to 2, in cases of a tournament or a reserved arena event
 	 * where they have the event, and the match
+	 * The stack order is the order in which they joined, the top being the most recent
 	 */
 	Stack<Competition> competitions = new Stack<Competition>();
 
 	/** Which class did the player pick during the competition */
-	ArenaClass chosenClass;
+	ArenaClass preferredClass;
+
+	/** Which class is the player currently */
+	ArenaClass currentClass;
+
+	/** The players old location, from where they were first teleported*/
+	Location oldLocation;
+
+	/** The current location of the player (in arena, lobby, etc)*/
+	LocationType curLocation = LocationType.HOME;
+
+	List<SpawnInstance> mobs;
 
 	/** Has the player specified they are "ready" by clicking a block or sign */
 	boolean isReady;
@@ -47,7 +61,8 @@ public class ArenaPlayer {
 
 	public void reset() {
 		this.isReady = false;
-		this.chosenClass = null;
+		this.currentClass = null;
+		this.despawnMobs();
 	}
 
 	@Override
@@ -132,12 +147,20 @@ public class ArenaPlayer {
 		return player.hasPermission(perm);
 	}
 
-	public ArenaClass getChosenClass() {
-		return chosenClass;
+	public ArenaClass getCurrentClass() {
+		return currentClass;
 	}
 
-	public void setChosenClass(ArenaClass chosenClass) {
-		this.chosenClass = chosenClass;
+	public void setCurrentClass(ArenaClass arenaClass) {
+		this.currentClass = arenaClass;
+	}
+
+	public ArenaClass getPreferredClass() {
+		return preferredClass;
+	}
+
+	public void setPreferredClass(ArenaClass arenaClass) {
+		this.preferredClass = arenaClass;
 	}
 
 	public int getPriority() {
@@ -169,4 +192,39 @@ public class ArenaPlayer {
 		return competitions.isEmpty() ? null : competitions.peek().getTeam(this);
 	}
 
+	public void markOldLocation(){
+		if (oldLocation == null){
+			oldLocation = getLocation();}
+	}
+	public void clearOldLocation(){
+		oldLocation = null;
+	}
+	public Location getOldLocation(){
+		return oldLocation;
+	}
+	public void setCurLocation(LocationType type){
+		this.curLocation = type;
+	}
+	public LocationType getCurLocation(){
+		return this.curLocation;
+	}
+	public void despawnMobs(){
+		if (mobs != null){
+			for (SpawnInstance es: mobs){
+				es.despawn();}
+			mobs.clear();
+		}
+	}
+	public void setMobs(List<SpawnInstance> mobs){
+		this.mobs = mobs;
+	}
+	public void spawnMobs(){
+		if (mobs != null){
+			for (SpawnInstance es: mobs){
+				es.despawn();
+				es.setLocation(this.getLocation());
+				es.spawn();
+			}
+		}
+	}
 }

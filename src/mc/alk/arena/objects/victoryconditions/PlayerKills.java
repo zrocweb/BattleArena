@@ -7,8 +7,8 @@ import java.util.TreeMap;
 import mc.alk.arena.competition.match.Match;
 import mc.alk.arena.events.matches.MatchFindCurrentLeaderEvent;
 import mc.alk.arena.events.players.ArenaPlayerKillEvent;
+import mc.alk.arena.objects.events.ArenaEventHandler;
 import mc.alk.arena.objects.events.EventPriority;
-import mc.alk.arena.objects.events.MatchEventHandler;
 import mc.alk.arena.objects.scoreboard.ArenaObjective;
 import mc.alk.arena.objects.scoreboard.ArenaScoreboard;
 import mc.alk.arena.objects.teams.ArenaTeam;
@@ -20,16 +20,16 @@ public class PlayerKills extends VictoryCondition implements ScoreTracker{
 
 	public PlayerKills(Match match) {
 		super(match);
-		kills = new ArenaObjective("playerkills","Player Kills");
+		kills = new ArenaObjective("playerkills","Player Kills",5);
 		kills.setDisplayName(MessageUtil.colorChat("&4Player Kills"));
 	}
-	@MatchEventHandler(priority=EventPriority.LOW)
+	@ArenaEventHandler(priority=EventPriority.LOW)
 	public void playerKillEvent(ArenaPlayerKillEvent event) {
 		kills.addPoints(event.getPlayer(), event.getPoints());
 		kills.addPoints(event.getTeam(), event.getPoints());
 	}
 
-	@MatchEventHandler(priority = EventPriority.LOW)
+	@ArenaEventHandler(priority = EventPriority.LOW)
 	public void onFindCurrentLeader(MatchFindCurrentLeaderEvent event) {
 		Collection<ArenaTeam> leaders = kills.getLeaders();
 		if (leaders.size() > 1){

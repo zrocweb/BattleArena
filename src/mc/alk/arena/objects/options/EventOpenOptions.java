@@ -63,11 +63,16 @@ public class EventOpenOptions {
 		Map<EventOpenOption,Object> ops = eoo.options;
 		int i =0;
 		for (String op: args){
-			if ( ignoreArgs != null && ignoreArgs.contains(i++))
+			if ( ignoreArgs != null && ignoreArgs.contains(i++) || op == null || op.isEmpty())
 				continue;
 			Object obj = null;
 			String[] split = op.split("=");
 			split[0] = split[0].trim().toUpperCase();
+			Arena arena = BattleArena.getBAController().getArena(op);
+			if (arena != null){
+				ops.put(EventOpenOption.ARENA, arena);
+				continue;
+			}
 			EventOpenOption to = null;
 			try{
 				to = EventOpenOption.valueOf(split[0]);
@@ -98,12 +103,12 @@ public class EventOpenOptions {
 			}
 			break;
 			case TIME:
-				try {obj = Integer.valueOf(val) *60;}
+				try {obj = Integer.valueOf(val);}
 				catch (Exception e){throw new InvalidOptionException("&cTime wasnt an integer: &6" +val);}
 				eoo.secTillStart = (Integer) obj;
 				break;
 			case INTERVAL:
-				try {obj = Integer.valueOf(val) *60;}
+				try {obj = Integer.valueOf(val);}
 				catch (Exception e){throw new InvalidOptionException("&cTime interval wasnt an integer: &6" +val);}
 				eoo.announceInterval = (Integer) obj;
 				break;
